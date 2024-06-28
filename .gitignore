@@ -1,0 +1,7 @@
+ignore/
+yolov8-seg/
+lidar_dataset/
+log/
+model/
+output/
+*.mp4

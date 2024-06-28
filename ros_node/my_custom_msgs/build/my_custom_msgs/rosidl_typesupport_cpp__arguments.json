@@ -1,0 +1,19 @@
+{
+  "package_name": "my_custom_msgs",
+  "output_dir": "/data/python_projects/autonomous_driving/driving/ros_node/my_custom_msgs/build/my_custom_msgs/rosidl_typesupport_cpp/my_custom_msgs",
+  "template_dir": "/opt/ros/galactic/share/rosidl_typesupport_cpp/resource",
+  "idl_tuples": [
+    "/data/python_projects/autonomous_driving/driving/ros_node/my_custom_msgs/build/my_custom_msgs/rosidl_adapter/my_custom_msgs:msg/LidarData.idl",
+    "/data/python_projects/autonomous_driving/driving/ros_node/my_custom_msgs/build/my_custom_msgs/rosidl_adapter/my_custom_msgs:msg/LidarDatas.idl"
+  ],
+  "target_dependencies": [
+    "/opt/ros/galactic/lib/rosidl_typesupport_cpp/rosidl_typesupport_cpp",
+    "/opt/ros/galactic/lib/python3.8/site-packages/rosidl_typesupport_cpp/__init__.py",
+    "/opt/ros/galactic/share/rosidl_typesupport_cpp/resource/action__type_support.cpp.em",
+    "/opt/ros/galactic/share/rosidl_typesupport_cpp/resource/idl__type_support.cpp.em",
+    "/opt/ros/galactic/share/rosidl_typesupport_cpp/resource/msg__type_support.cpp.em",
+    "/opt/ros/galactic/share/rosidl_typesupport_cpp/resource/srv__type_support.cpp.em",
+    "/data/python_projects/autonomous_driving/driving/ros_node/my_custom_msgs/build/my_custom_msgs/rosidl_adapter/my_custom_msgs/msg/LidarData.idl",
+    "/data/python_projects/autonomous_driving/driving/ros_node/my_custom_msgs/build/my_custom_msgs/rosidl_adapter/my_custom_msgs/msg/LidarDatas.idl"
+  ]
+}
