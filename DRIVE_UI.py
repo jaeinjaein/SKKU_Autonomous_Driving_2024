@@ -14,6 +14,23 @@ import numpy as np
 import serial.tools.list_ports
 from inference import inference_image
 from ultralytics import YOLO
+import matplotlib.pyplot as plt
+import time
+import serial
+
+test_list = []
+ard_list = []
+
+def map_to_n_levels(value):
+    if value < -30:
+        value = -30
+    elif value > 30:
+        value = 30
+
+    # Map the value to the range 0 to 14
+    mapped_value = int((value + 30) / 60 * 14)
+
+    return mapped_value
 
 class CamNode(Node):
     def __init__(self):
@@ -48,7 +65,7 @@ class CamNode(Node):
         self.cap = cv2.VideoCapture(video_path)
         if self.timer is not None:
             self.timer.cancel()
-        self.timer = self.create_timer(1.0 / 30.0, self.publish_camera_frame)
+        self.timer = self.create_timer(1.0 / 10.0, self.publish_camera_frame)
 
     def destroy_node(self):
         super().destroy_node()
@@ -77,11 +94,19 @@ class LidarNode(Node):
 class ArdNode(Node):
     def __init__(self):
         super().__init__('ard_node')
-        self.publisher = self.create_publisher(String, 'serial_pta', 10)
+        self.subscription_cam = self.create_subscription(
+            String,
+            'serial_pta',
+            self.listener_pta,
+            10)
+        self.publisher = self.create_publisher(String, 'serial_atp', 10)
         self.timer = None
+        self.port = ''
+        self.serial_session = None
 
     def start_arduino(self, port):
         self.port = port
+        self.serial_session = serial.Serial(port=self.port, baudrate=9600)
         if self.timer is not None:
             self.timer.cancel()
         self.timer = self.create_timer(1.0 / 1.0, self.publish_arduino_data)
@@ -92,6 +117,10 @@ class ArdNode(Node):
         msg = String()
         msg.data = data
         self.publisher.publish(msg)
+    
+    def listener_pta(self, data):
+        if self.port != '':
+            self.serial_session.write(data.data.encode())
 
 class MainNode(Node):
     def __init__(self):
@@ -108,23 +137,36 @@ class MainNode(Node):
             10)
         self.subscription_serial = self.create_subscription(
             String,
-            'serial_pta',
+            'serial_atp',
             self.listener_callback_serial,
             10)
+        self.pta_publisher = self.create_publisher(String, 'serial_pta', 10)
         self.bridge = CvBridge()
         self.cv_image = None
         self.create_blank_image()
-        self.model = YOLO('./last.engine', task='segment')
+        self.model = YOLO('./models/yolov8s-ep200-frz-d1.pt', task='segment')
 
     def create_blank_image(self):
         self.cv_image = np.zeros((720, 1280, 3), dtype=np.uint8)
 
     def listener_callback_cam(self, data):
+        global test_list
         try:
             img = self.bridge.imgmsg_to_cv2(data, "bgr8")
             self.update_image_cam(img, 0)
-            img_inferenced = inference_image(self.model, img)
+            img_inferenced, result_degree = inference_image(self.model, img)
             self.update_image_cam(img_inferenced, 1)
+            test_list.append(result_degree)
+            before_value = test_list[len(test_list)-2]
+            if before_value != -1000.0:  # trash value
+                diff = abs(result_degree - before_value)
+                if diff > 30.0:
+                    result_degree = -1000.0
+            test_list[len(test_list)-1] = result_degree
+            if result_degree != -1000.0:
+                steering_value = map_to_n_levels(result_degree)
+                self.publish_angle(steering_value)
+            
         except CvBridgeError as e:
             self.get_logger().error(f"Error converting ROS Image message to OpenCV: {e}")
 
@@ -148,6 +190,29 @@ class MainNode(Node):
         elif pos == 3:
             self.cv_image[360:, 640:] = resized_img
 
+    def publish_setting(self):
+        data = 'setting;'
+        msg = String()
+        msg.data = data
+        self.pta_publisher.publish(msg)
+        
+    def publish_speed(self, value):
+        data = 'speed'
+        if value >= 0:
+            data += '+'
+        else:
+            data += '-'
+        data += '%03d;' % value
+        msg = String()
+        msg.data = data
+        self.pta_publisher.publish(msg)
+        
+    def publish_angle(self, value):
+        data = 'angle%02d;' % value
+        msg = String()
+        msg.data = data
+        self.pta_publisher.publish(msg)
+        
 class MyApp(QWidget):
     def __init__(self, ros_nodes):
         super().__init__()
@@ -203,8 +268,11 @@ class MyApp(QWidget):
         self.rightBottomGroup = QGroupBox('Control')
         self.startButton = QPushButton('Start')
         self.startButton.clicked.connect(self.startButtonClicked)
+        self.rearstartButton = QPushButton('RearStart')
+        self.rearstartButton.clicked.connect(self.rearstartButtonClicked)
         rightBottomLayout = QVBoxLayout()
         rightBottomLayout.addWidget(self.startButton)
+        rightBottomLayout.addWidget(self.rearstartButton)
         self.rightBottomGroup.setLayout(rightBottomLayout)
 
         layout.addWidget(self.leftTopGroup, 0, 0)
@@ -285,8 +353,18 @@ class MyApp(QWidget):
         self.ard_node.start_arduino(port)
 
     def startButtonClicked(self):
+        global test_list
+        if len(test_list) > 1:
+            res = np.array(test_list)
+            np.save(f'./{time.time_ns()}_drive.npy', res)
+            #differences = [j-i for i, j in zip(test_list[:-1], test_list[1:])]
+            #plt.plot(test_list, label='Data')
+            #plt.plot(differences, label='Differences', linestyle='--', marker='o')
+            #plt.grid(True)
+            #plt.show()
+            test_list = [-1000.0]
         if self.checkboxTest.isChecked():
-            video_path = './1_1415.mp4'
+            video_path = './yolov8-seg/1_1415.mp4'
             self.cam_node.start_video(video_path)
 
     def updateImage(self):
@@ -304,6 +382,10 @@ class MyApp(QWidget):
         img = img.rgbSwapped()
         self.sensorLabel.setPixmap(QPixmap.fromImage(img))
         self.sensorLabel.setScaledContents(True)
+        
+    def rearstartButtonClicked(self):
+        self.main_node.publish_speed(150)
+        
 
 def main(args=None):
     rclpy.init(args=args)
