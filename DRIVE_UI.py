@@ -16,7 +16,7 @@ from inference import inference_image, RunningAverage, inf_angle
 from ultralytics import YOLO
 import time
 import serial
-from util.tools import map_to_n_levels
+from util.tools import map_to_n_levels, put_message
 
 ard_list = []
 
@@ -33,6 +33,9 @@ class CamNode(Node):
         self.model = YOLO('./last.engine', task='segment')
         self.running_average = RunningAverage()
         self.create_blank_image()
+        self.record = False
+        self.writer_orig = None
+        self.writer_inferenced = None
 
     def start_camera(self, device_index):
         if self.cap is not None:
@@ -46,21 +49,41 @@ class CamNode(Node):
 
     def create_blank_image(self):
         self.cv_image = np.zeros((720, 1280, 3), dtype=np.uint8)
+    
+    def update_image_cam(self, img, pos):
+        # Resize the incoming image to fit into the top-left quadrant (640x360)
+        resized_img = cv2.resize(img, (640, 360))
+        if pos == 0:
+            self.cv_image[0:360, 0:640] = resized_img
+        elif pos == 1:
+            self.cv_image[0:360, 640:] = resized_img
+        elif pos == 2:
+            self.cv_image[360:, :640] = resized_img
+        elif pos == 3:
+            self.cv_image[360:, 640:] = resized_img
 
     def publish_camera_frame(self):
         if self.cap is None:
             return
         ret, frame = self.cap.read()
         if ret:
+            self.update_image_cam(frame, 0)
             try:
                 img_inferenced, _, line1_ang, line2_ang = inf_angle(self.model, frame, self.running_average)
                 steering_value = -9999.0
+                print(frame.shape, img_inferenced.shape)
                 if line1_ang != None:
                     steering_value = map_to_n_levels(line1_ang)
                     self.publish_angle(steering_value)
                 elif line2_ang != None:
                     steering_value = map_to_n_levels(line2_ang)
                     self.publish_angle(steering_value)
+                img_inferenced = put_message(img_inferenced, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
+                self.update_image_cam(img_inferenced, 1)
+                if self.record:
+                    self.writer_orig.write(frame)
+                    self.writer_inferenced.write(img_inferenced)
+                
             except CvBridgeError as e:
                 self.get_logger().error(f"Error converting OpenCV image to ROS Image message: {e}")
     def publish_angle(self, value):
@@ -76,11 +99,26 @@ class CamNode(Node):
         if self.timer is not None:
             self.timer.cancel()
         self.timer = self.create_timer(1.0 / 30.0, self.publish_camera_frame)
+        if self.record:
+            local_time = time.localtime()
+            formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, 20.0, (1280, 720))
+            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, 20.0, (1280, 720))
 
     def destroy_node(self):
         super().destroy_node()
         if self.cap is not None:
             self.cap.release()
+            
+    def stop_cam(self):
+        if self.cap is not None:
+            self.cap.release()
+        if self.timer is not None:
+            self.timer.cancel()
+        if self.record:
+            self.writer_orig.release()
+            self.writer_inferenced.release()
 
 class LidarNode(Node):
     def __init__(self):
@@ -135,11 +173,6 @@ class ArdNode(Node):
 class MainNode(Node):
     def __init__(self):
         super().__init__('main_node')
-        self.subscription_cam = self.create_subscription(
-            Image,
-            'cam_img',
-            self.listener_callback_cam,
-            10)
         self.subscription_lidar = self.create_subscription(
             String,
             'lidar_data',
@@ -155,29 +188,9 @@ class MainNode(Node):
         self.cv_image = None
         self.create_blank_image()
         self.model = YOLO('./last.engine', task='segment')
-        self.running_average = RunningAverage()
 
     def create_blank_image(self):
         self.cv_image = np.zeros((720, 1280, 3), dtype=np.uint8)
-
-    def listener_callback_cam(self, data):
-        global test_list
-        try:
-            img = self.bridge.imgmsg_to_cv2(data, "bgr8")
-            self.update_image_cam(img, 0)
-            img_inferenced, _, line1_ang, line2_ang = inf_angle(self.model, img, self.running_average)
-            steering_value = -9999.0
-            if line1_ang != None:
-                steering_value = map_to_n_levels(line1_ang)
-                self.publish_angle(steering_value)
-            elif line2_ang != None:
-                steering_value = map_to_n_levels(line2_ang)
-                self.publish_angle(steering_value)
-            #img_inferenced, result_degree = inference_image(self.model, img)
-            self.update_image_cam(img_inferenced, 1)
-            
-        except CvBridgeError as e:
-            self.get_logger().error(f"Error converting ROS Image message to OpenCV: {e}")
 
     def listener_callback_lidar(self, data):
         # TODO: Add code to update lower-left quadrant of self.cv_image with lidar data
@@ -237,15 +250,18 @@ class MyApp(QWidget):
         self.checkbox2 = QCheckBox('AV/TR')
         self.checkbox3 = QCheckBox('PARK')
         self.checkboxTest = QCheckBox('TEST')
+        self.checkboxRecord = QCheckBox('RECORD')
         self.checkbox1.stateChanged.connect(lambda: self.modeChanged(self.checkbox1))
         self.checkbox2.stateChanged.connect(lambda: self.modeChanged(self.checkbox2))
         self.checkbox3.stateChanged.connect(lambda: self.modeChanged(self.checkbox3))
         self.checkboxTest.stateChanged.connect(lambda: self.modeChanged(self.checkboxTest))
+        self.checkboxRecord.stateChanged.connect(self.recordChanged)
         leftTopLayout = QVBoxLayout()
         leftTopLayout.addWidget(self.checkbox1)
         leftTopLayout.addWidget(self.checkbox2)
         leftTopLayout.addWidget(self.checkbox3)
         leftTopLayout.addWidget(self.checkboxTest)
+        leftTopLayout.addWidget(self.checkboxRecord)
         self.leftTopGroup.setLayout(leftTopLayout)
         
         # Right top driver select group
@@ -280,7 +296,7 @@ class MyApp(QWidget):
         self.speed150Button = QPushButton('Speed : 150')
         self.speed080Button = QPushButton('Speed : 80')
         self.speed000Button = QPushButton('Speed : 0')
-        self.startButton.clicked.connect(self.TestStartButtonClicked)
+        self.TestStartButton.clicked.connect(self.TestStartButtonClicked)
         self.speed255Button.clicked.connect(self.speed255ButtonClicked)
         self.speed150Button.clicked.connect(self.speed150ButtonClicked)
         self.speed080Button.clicked.connect(self.speed080ButtonClicked)
@@ -352,6 +368,9 @@ class MyApp(QWidget):
                 self.checkbox1.setChecked(False)
                 self.checkbox2.setChecked(False)
                 self.checkbox3.setChecked(False)
+    
+    def recordChanged(self):
+        self.cam_node.record = self.checkboxRecord.isChecked()
 
     def selectCamDevice(self, comboBox, selectButton):
         index = int(comboBox.currentText())
@@ -373,8 +392,11 @@ class MyApp(QWidget):
 
     def TestStartButtonClicked(self):
         if self.checkboxTest.isChecked():
+            if self.cam_node.cap is not None:
+                self.cam_node.stop_cam()
             video_path = './yolov8-seg/1_1415.mp4'
             self.cam_node.start_video(video_path)
+            
 
     def updateImage(self):
         if self.cam_node.cv_image is not None:

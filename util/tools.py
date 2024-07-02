@@ -84,3 +84,37 @@ def convert_bev_points(image, points):
     transformed_point = cv2.perspectiveTransform(points, matrix)
 
     return transformed_point
+
+def map_to_n_levels(value):
+    if value < -60:
+        value = -60
+    elif value > 60:
+        value = 60
+    
+    mapped_value = int((value+60) / 120 * 14)
+    return mapped_value
+    
+def put_message(image, msg_cnt=1, msg=['test'], show=False):
+    top_left_x = 0
+    top_left_y = 0
+    width = 500
+    height = 20 + (msg_cnt * 50)
+    color = (255, 255, 255)  # white
+    cv2.rectangle(image, (top_left_x, top_left_y), (top_left_x + width, top_left_y + height), color, -1)
+    
+    org = (top_left_x + 10, top_left_y + 50)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 1
+    font_color = (0, 0, 0)  # blck
+    thickness = 2
+    
+    for i in range(msg_cnt):
+        org = (top_left_x + 10, top_left_y + (50*(i+1)))
+        cv2.putText(image, msg[i], org, font, font_scale, font_color, thickness, cv2.LINE_AA)
+
+    if show:
+        cv2.imshow("Image with Text", image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        cv2.imwrite('output_image.jpg', image)
+    return image
