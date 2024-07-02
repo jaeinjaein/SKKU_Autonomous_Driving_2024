@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import cv2
 import rclpy
@@ -46,6 +47,12 @@ class CamNode(Node):
         if self.timer is not None:
             self.timer.cancel()
         self.timer = self.create_timer(1.0 / 20.0, self.publish_camera_frame)
+        if self.record:
+            local_time = time.localtime()
+            formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, 20.0, (1920, 1080))
+            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, 20.0, (1920, 1080))
 
     def create_blank_image(self):
         self.cv_image = np.zeros((720, 1280, 3), dtype=np.uint8)
@@ -98,7 +105,7 @@ class CamNode(Node):
         self.cap = cv2.VideoCapture(video_path)
         if self.timer is not None:
             self.timer.cancel()
-        self.timer = self.create_timer(1.0 / 30.0, self.publish_camera_frame)
+        self.timer = self.create_timer(1.0 / 20.0, self.publish_camera_frame)
         if self.record:
             local_time = time.localtime()
             formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
@@ -239,6 +246,7 @@ class MyApp(QWidget):
     def __init__(self, ros_nodes):
         super().__init__()
         self.main_node, self.cam_node, self.lidar_node, self.ard_node = ros_nodes
+        self.cam_conn, self.lidar_conn, self.ard_conn = False, False, False
         self.initUI()
 
     def initUI(self):
@@ -268,16 +276,21 @@ class MyApp(QWidget):
         self.rightTopGroup = QGroupBox('Driver Select')
         rightTopLayout = QVBoxLayout()
 
+        
+        self.deviceReloadButton = QPushButton('Device Reload')
+        self.deviceReloadButton.clicked.connect(self.deviceReloadButtonClicked)
+        rightTopLayout.addWidget(self.deviceReloadButton)
+
         self.camComboBox = QComboBox()
-        self.camSelectButton = QPushButton('Select')
+        self.camSelectButton = QPushButton('Connect')
         self.createDeviceSelectionLayout(rightTopLayout, 'CAM Device', self.populateCamComboBox, self.camComboBox, self.camSelectButton, self.selectCamDevice)
 
         self.lidarComboBox = QComboBox()
-        self.lidarSelectButton = QPushButton('Select')
+        self.lidarSelectButton = QPushButton('Connect')
         self.createDeviceSelectionLayout(rightTopLayout, 'Lidar Device', self.populateSerialComboBox, self.lidarComboBox, self.lidarSelectButton, self.selectLidarDevice)
 
         self.ardComboBox = QComboBox()
-        self.ardSelectButton = QPushButton('Select')
+        self.ardSelectButton = QPushButton('Connect')
         self.createDeviceSelectionLayout(rightTopLayout, 'Ard Device', self.populateSerialComboBox, self.ardComboBox, self.ardSelectButton, self.selectArdDevice)
 
         self.rightTopGroup.setLayout(rightTopLayout)
@@ -296,17 +309,20 @@ class MyApp(QWidget):
         self.speed150Button = QPushButton('Speed : 150')
         self.speed080Button = QPushButton('Speed : 80')
         self.speed000Button = QPushButton('Speed : 0')
+        self.settingAngleButton = QPushButton('Car Angle Setting')
         self.TestStartButton.clicked.connect(self.TestStartButtonClicked)
         self.speed255Button.clicked.connect(self.speed255ButtonClicked)
         self.speed150Button.clicked.connect(self.speed150ButtonClicked)
         self.speed080Button.clicked.connect(self.speed080ButtonClicked)
         self.speed000Button.clicked.connect(self.speed000ButtonClicked)
+        self.settingAngleButton.clicked.connect(self.settingAngleButtonClicked)
         rightBottomLayout = QVBoxLayout()
         rightBottomLayout.addWidget(self.TestStartButton)
         rightBottomLayout.addWidget(self.speed255Button)
         rightBottomLayout.addWidget(self.speed150Button)
         rightBottomLayout.addWidget(self.speed080Button)
         rightBottomLayout.addWidget(self.speed000Button)
+        rightBottomLayout.addWidget(self.settingAngleButton)
         
         self.rightBottomGroup.setLayout(rightBottomLayout)
 
@@ -346,6 +362,7 @@ class MyApp(QWidget):
             index += 1
 
     def populateSerialComboBox(self, comboBox):
+        comboBox.clear()
         ports = serial.tools.list_ports.comports()
         for port in ports:
             comboBox.addItem(port.device)
@@ -373,10 +390,17 @@ class MyApp(QWidget):
         self.cam_node.record = self.checkboxRecord.isChecked()
 
     def selectCamDevice(self, comboBox, selectButton):
-        index = int(comboBox.currentText())
-        selectButton.setEnabled(False)
-        comboBox.setEnabled(False)
-        self.cam_node.start_camera(index)
+        if not self.cam_conn:
+            index = int(comboBox.currentText())
+            comboBox.setEnabled(False)
+            self.cam_node.start_camera(index)
+            selectButton.setText("Disconnect")
+            self.cam_conn = True
+        else:
+            comboBox.setEnabled(True)
+            self.cam_node.stop_cam()
+            selectButton.setText("Connect")
+            self.cam_conn = False
 
     def selectLidarDevice(self, comboBox, selectButton):
         port = comboBox.currentText()
@@ -425,6 +449,26 @@ class MyApp(QWidget):
         
     def speed000ButtonClicked(self):
         self.main_node.publish_speed(0)
+        
+    def settingAngleButtonClicked(self):
+        self.main_node.publish_setting()
+        
+    def deviceReloadButtonClicked(self):
+        commands = [
+            "echo 'dlwodls8747' | sudo -S chmod 777 /dev/ttyUSB*",
+            "echo 'dlwodls8747' | sudo -S chmod 777 /dev/ttyACM*"
+        ]
+
+        # 각 명령어 실행
+        for command in commands:
+            result = subprocess.run(command, shell=True, capture_output=True, text=True)
+            print(result.stdout)
+            if result.returncode != 0:
+                print(f"Error: {result.stderr}")
+        self.populateCamComboBox(self.camComboBox)
+        self.populateSerialComboBox(self.ardComboBox)
+        self.populateSerialComboBox(self.lidarComboBox)
+        
         
 
 def main(args=None):
