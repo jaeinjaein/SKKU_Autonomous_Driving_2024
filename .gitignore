@@ -5,4 +5,9 @@ log/
 model/
 output/
 models/
+dataset_img/
 *.mp4
+*.npy
+trt/
+YOLOPv2/
+*.zip

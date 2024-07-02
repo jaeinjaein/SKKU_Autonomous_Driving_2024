@@ -12,7 +12,7 @@ from PyQt5.QtCore import QTimer, Qt
 import threading
 import numpy as np
 import serial.tools.list_ports
-from inference import inference_image
+from inference import inference_image, RunningAverage, inf_angle
 from ultralytics import YOLO
 import matplotlib.pyplot as plt
 import time
@@ -22,31 +22,38 @@ test_list = []
 ard_list = []
 
 def map_to_n_levels(value):
-    if value < -30:
-        value = -30
-    elif value > 30:
-        value = 30
+    if value < -60:
+        value = -60
+    elif value > 60:
+        value = 60
 
     # Map the value to the range 0 to 14
-    mapped_value = int((value + 30) / 60 * 14)
+    mapped_value = int((value + 60) / 120 * 14)
 
-    return mapped_value
+    return mapped_value + 1
 
 class CamNode(Node):
     def __init__(self):
         super().__init__('cam_node')
+     
         self.publisher = self.create_publisher(Image, 'cam_img', 10)
+        self.pta_publisher = self.create_publisher(String, 'serial_pta', 10)
         self.bridge = CvBridge()
         self.cap = None
         self.timer = None
+        
+        self.model = YOLO('./last.engine', task='segment')
+        self.running_average = RunningAverage()
 
     def start_camera(self, device_index):
         if self.cap is not None:
             self.cap.release()
         self.cap = cv2.VideoCapture(device_index)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
         if self.timer is not None:
             self.timer.cancel()
-        self.timer = self.create_timer(1.0 / 30.0, self.publish_camera_frame)
+        self.timer = self.create_timer(1.0 / 10.0, self.publish_camera_frame)
 
     def publish_camera_frame(self):
         if self.cap is None:
@@ -54,10 +61,24 @@ class CamNode(Node):
         ret, frame = self.cap.read()
         if ret:
             try:
-                msg = self.bridge.cv2_to_imgmsg(frame, "bgr8")
-                self.publisher.publish(msg)
+                #msg = self.bridge.cv2_to_imgmsg(frame, "bgr8")
+                img_inferenced, _, line1_ang, line2_ang = inf_angle(self.model, frame, self.running_average)
+                steering_value = -9999.0
+                if line1_ang != None:
+                    steering_value = map_to_n_levels(line1_ang)
+                    self.publish_angle(steering_value)
+                elif line2_ang != None:
+                    steering_value = map_to_n_levels(line2_ang)
+                    self.publish_angle(steering_value)
+                
+                #self.publisher.publish(msg)
             except CvBridgeError as e:
                 self.get_logger().error(f"Error converting OpenCV image to ROS Image message: {e}")
+    def publish_angle(self, value):
+        data = 'angle%02d;' % value
+        msg = String()
+        msg.data = data
+        self.pta_publisher.publish(msg)
 
     def start_video(self, video_path):
         if self.cap is not None:
@@ -65,7 +86,7 @@ class CamNode(Node):
         self.cap = cv2.VideoCapture(video_path)
         if self.timer is not None:
             self.timer.cancel()
-        self.timer = self.create_timer(1.0 / 10.0, self.publish_camera_frame)
+        self.timer = self.create_timer(1.0 / 30.0, self.publish_camera_frame)
 
     def destroy_node(self):
         super().destroy_node()
@@ -144,7 +165,8 @@ class MainNode(Node):
         self.bridge = CvBridge()
         self.cv_image = None
         self.create_blank_image()
-        self.model = YOLO('./models/yolov8s-ep200-frz-d1.pt', task='segment')
+        self.model = YOLO('./last.engine', task='segment')
+        self.running_average = RunningAverage()
 
     def create_blank_image(self):
         self.cv_image = np.zeros((720, 1280, 3), dtype=np.uint8)
@@ -154,18 +176,27 @@ class MainNode(Node):
         try:
             img = self.bridge.imgmsg_to_cv2(data, "bgr8")
             self.update_image_cam(img, 0)
-            img_inferenced, result_degree = inference_image(self.model, img)
-            self.update_image_cam(img_inferenced, 1)
-            test_list.append(result_degree)
-            before_value = test_list[len(test_list)-2]
-            if before_value != -1000.0:  # trash value
-                diff = abs(result_degree - before_value)
-                if diff > 30.0:
-                    result_degree = -1000.0
-            test_list[len(test_list)-1] = result_degree
-            if result_degree != -1000.0:
-                steering_value = map_to_n_levels(result_degree)
+            img_inferenced, _, line1_ang, line2_ang = inf_angle(self.model, img, self.running_average)
+            steering_value = -9999.0
+            if line1_ang != None:
+                steering_value = map_to_n_levels(line1_ang)
                 self.publish_angle(steering_value)
+            elif line2_ang != None:
+                steering_value = map_to_n_levels(line2_ang)
+                self.publish_angle(steering_value)
+            #img_inferenced, result_degree = inference_image(self.model, img)
+            self.update_image_cam(img_inferenced, 1)
+            #test_list.append(result_degree)
+            #before_value = test_list[len(test_list)-2]
+            #if before_value != -1000.0:  # trash value
+            #    diff = abs(result_degree - before_value)
+            #    if diff > 30.0:
+            #        result_degree = -1000.0
+            #test_list[len(test_list)-1] = result_degree
+            #if result_degree != -1000.0:
+            #    steering_value = map_to_n_levels(result_degree)
+            #    self.publish_angle(steering_value)
+            #cv2.imwrite(f'./dataset_img/{time.time_ns()}.jpg', img)
             
         except CvBridgeError as e:
             self.get_logger().error(f"Error converting ROS Image message to OpenCV: {e}")

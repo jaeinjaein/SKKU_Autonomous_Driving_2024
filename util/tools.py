@@ -1,6 +1,8 @@
 import serial.tools.list_ports
 import os
 import cv2
+import numpy as np
+import matplotlib.pyplot as plt
 
 device_vp = [('Lidar', '1A86:7523'), ('Arduino', '2A03:0042')]
 
@@ -29,3 +31,56 @@ def lidar_datas():
 
 def drive_datas():
     return os.listdir('../cam_dataset')
+    
+def convert_bev(image):
+    # 원본 이미지의 크기를 가져옵니다.
+    height, width = image.shape[:2]
+
+    # 변환 전 후의 4개의 지점을 정의합니다.
+    # 변환 전 지점들 (예시 좌표입니다. 실제 도로 사진에 맞게 조정해야 합니다)
+    src_points = np.float32([
+        [width * 0.3, height * 0.5], 
+        [width * 0.7, height * 0.5], 
+        [width * 0, height * 1.0], 
+        [width * 1, height * 1.0]
+    ])
+
+    # 변환 후 지점들
+    dst_points = np.float32([
+        [0, 0], 
+        [width, 0], 
+        [0, height], 
+        [width, height]
+    ])
+
+    # 변환 매트릭스를 계산합니다.
+    matrix = cv2.getPerspectiveTransform(src_points, dst_points)
+
+    # 퍼스펙티브 변환을 적용합니다.
+    bird_eye_view = cv2.warpPerspective(image, matrix, (width, height))
+    return bird_eye_view
+
+def convert_bev_points(image, points):
+    
+    height, width = image.shape[:2]
+    # 변환 전 후의 4개의 지점을 정의합니다.
+    # 변환 전 지점들 (예시 좌표입니다. 실제 도로 사진에 맞게 조정해야 합니다)
+    src_points = np.float32([
+        [width * 0.3, height * 0.5], 
+        [width * 0.7, height * 0.5], 
+        [width * 0, height * 1.0], 
+        [width * 1, height * 1.0]
+    ])
+
+    # 변환 후 지점들
+    dst_points = np.float32([
+        [0, 0], 
+        [width, 0], 
+        [0, height], 
+        [width, height]
+    ])
+    
+    matrix = cv2.getPerspectiveTransform(src_points, dst_points)
+    transformed_point = cv2.perspectiveTransform(points, matrix)
+
+    return transformed_point
