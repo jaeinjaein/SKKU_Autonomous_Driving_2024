@@ -14,23 +14,11 @@ import numpy as np
 import serial.tools.list_ports
 from inference import inference_image, RunningAverage, inf_angle
 from ultralytics import YOLO
-import matplotlib.pyplot as plt
 import time
 import serial
+from util.tools import map_to_n_levels
 
-test_list = []
 ard_list = []
-
-def map_to_n_levels(value):
-    if value < -60:
-        value = -60
-    elif value > 60:
-        value = 60
-
-    # Map the value to the range 0 to 14
-    mapped_value = int((value + 60) / 120 * 14)
-
-    return mapped_value + 1
 
 class CamNode(Node):
     def __init__(self):
@@ -41,9 +29,10 @@ class CamNode(Node):
         self.bridge = CvBridge()
         self.cap = None
         self.timer = None
-        
+        self.cv_image = None
         self.model = YOLO('./last.engine', task='segment')
         self.running_average = RunningAverage()
+        self.create_blank_image()
 
     def start_camera(self, device_index):
         if self.cap is not None:
@@ -53,7 +42,10 @@ class CamNode(Node):
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
         if self.timer is not None:
             self.timer.cancel()
-        self.timer = self.create_timer(1.0 / 10.0, self.publish_camera_frame)
+        self.timer = self.create_timer(1.0 / 20.0, self.publish_camera_frame)
+
+    def create_blank_image(self):
+        self.cv_image = np.zeros((720, 1280, 3), dtype=np.uint8)
 
     def publish_camera_frame(self):
         if self.cap is None:
@@ -61,7 +53,6 @@ class CamNode(Node):
         ret, frame = self.cap.read()
         if ret:
             try:
-                #msg = self.bridge.cv2_to_imgmsg(frame, "bgr8")
                 img_inferenced, _, line1_ang, line2_ang = inf_angle(self.model, frame, self.running_average)
                 steering_value = -9999.0
                 if line1_ang != None:
@@ -70,8 +61,6 @@ class CamNode(Node):
                 elif line2_ang != None:
                     steering_value = map_to_n_levels(line2_ang)
                     self.publish_angle(steering_value)
-                
-                #self.publisher.publish(msg)
             except CvBridgeError as e:
                 self.get_logger().error(f"Error converting OpenCV image to ROS Image message: {e}")
     def publish_angle(self, value):
@@ -186,17 +175,6 @@ class MainNode(Node):
                 self.publish_angle(steering_value)
             #img_inferenced, result_degree = inference_image(self.model, img)
             self.update_image_cam(img_inferenced, 1)
-            #test_list.append(result_degree)
-            #before_value = test_list[len(test_list)-2]
-            #if before_value != -1000.0:  # trash value
-            #    diff = abs(result_degree - before_value)
-            #    if diff > 30.0:
-            #        result_degree = -1000.0
-            #test_list[len(test_list)-1] = result_degree
-            #if result_degree != -1000.0:
-            #    steering_value = map_to_n_levels(result_degree)
-            #    self.publish_angle(steering_value)
-            #cv2.imwrite(f'./dataset_img/{time.time_ns()}.jpg', img)
             
         except CvBridgeError as e:
             self.get_logger().error(f"Error converting ROS Image message to OpenCV: {e}")
@@ -297,13 +275,23 @@ class MyApp(QWidget):
 
         # Right bottom group
         self.rightBottomGroup = QGroupBox('Control')
-        self.startButton = QPushButton('Start')
-        self.startButton.clicked.connect(self.startButtonClicked)
-        self.rearstartButton = QPushButton('RearStart')
-        self.rearstartButton.clicked.connect(self.rearstartButtonClicked)
+        self.TestStartButton = QPushButton('Test Start')
+        self.speed255Button = QPushButton('Speed : 255')
+        self.speed150Button = QPushButton('Speed : 150')
+        self.speed080Button = QPushButton('Speed : 80')
+        self.speed000Button = QPushButton('Speed : 0')
+        self.startButton.clicked.connect(self.TestStartButtonClicked)
+        self.speed255Button.clicked.connect(self.speed255ButtonClicked)
+        self.speed150Button.clicked.connect(self.speed150ButtonClicked)
+        self.speed080Button.clicked.connect(self.speed080ButtonClicked)
+        self.speed000Button.clicked.connect(self.speed000ButtonClicked)
         rightBottomLayout = QVBoxLayout()
-        rightBottomLayout.addWidget(self.startButton)
-        rightBottomLayout.addWidget(self.rearstartButton)
+        rightBottomLayout.addWidget(self.TestStartButton)
+        rightBottomLayout.addWidget(self.speed255Button)
+        rightBottomLayout.addWidget(self.speed150Button)
+        rightBottomLayout.addWidget(self.speed080Button)
+        rightBottomLayout.addWidget(self.speed000Button)
+        
         self.rightBottomGroup.setLayout(rightBottomLayout)
 
         layout.addWidget(self.leftTopGroup, 0, 0)
@@ -383,24 +371,14 @@ class MyApp(QWidget):
         comboBox.setEnabled(False)
         self.ard_node.start_arduino(port)
 
-    def startButtonClicked(self):
-        global test_list
-        if len(test_list) > 1:
-            res = np.array(test_list)
-            np.save(f'./{time.time_ns()}_drive.npy', res)
-            #differences = [j-i for i, j in zip(test_list[:-1], test_list[1:])]
-            #plt.plot(test_list, label='Data')
-            #plt.plot(differences, label='Differences', linestyle='--', marker='o')
-            #plt.grid(True)
-            #plt.show()
-            test_list = [-1000.0]
+    def TestStartButtonClicked(self):
         if self.checkboxTest.isChecked():
             video_path = './yolov8-seg/1_1415.mp4'
             self.cam_node.start_video(video_path)
 
     def updateImage(self):
-        if self.main_node.cv_image is not None:
-            self.showImage(self.main_node.cv_image)
+        if self.cam_node.cv_image is not None:
+            self.showImage(self.cam_node.cv_image)
 
     def showImage(self, img):
         qformat = QImage.Format_Indexed8
@@ -414,8 +392,17 @@ class MyApp(QWidget):
         self.sensorLabel.setPixmap(QPixmap.fromImage(img))
         self.sensorLabel.setScaledContents(True)
         
-    def rearstartButtonClicked(self):
+    def speed255ButtonClicked(self):
+        self.main_node.publish_speed(255)
+        
+    def speed150ButtonClicked(self):
         self.main_node.publish_speed(150)
+        
+    def speed080ButtonClicked(self):
+        self.main_node.publish_speed(80)
+        
+    def speed000ButtonClicked(self):
+        self.main_node.publish_speed(0)
         
 
 def main(args=None):
