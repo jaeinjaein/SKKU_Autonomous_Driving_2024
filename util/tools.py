@@ -39,10 +39,10 @@ def convert_bev(image):
     # 변환 전 후의 4개의 지점을 정의합니다.
     # 변환 전 지점들 (예시 좌표입니다. 실제 도로 사진에 맞게 조정해야 합니다)
     src_points = np.float32([
-        [width * 0.3, height * 0.5], 
-        [width * 0.7, height * 0.5], 
-        [width * 0, height * 1.0], 
-        [width * 1, height * 1.0]
+        [int(width * 0.27), height * 0.4], 
+        [int(width * 0.73), height * 0.4], 
+        [width * 0, height * 0.9], 
+        [width * 1, height * 0.9]
     ])
 
     # 변환 후 지점들
@@ -66,10 +66,10 @@ def convert_bev_points(image, points):
     # 변환 전 후의 4개의 지점을 정의합니다.
     # 변환 전 지점들 (예시 좌표입니다. 실제 도로 사진에 맞게 조정해야 합니다)
     src_points = np.float32([
-        [width * 0.3, height * 0.5], 
-        [width * 0.7, height * 0.5], 
-        [width * 0, height * 1.0], 
-        [width * 1, height * 1.0]
+        [int(width * 0.27), height * 0.4], 
+        [int(width * 0.73), height * 0.4], 
+        [width * 0, height * 0.9], 
+        [width * 1, height * 0.9]
     ])
 
     # 변환 후 지점들
@@ -86,13 +86,15 @@ def convert_bev_points(image, points):
     return transformed_point
 
 def map_to_n_levels(value):
-    if value < -60:
-        value = -60
-    elif value > 60:
-        value = 60
+    if value < -65:
+        value = -65
+    elif value > 65:
+        value = 65
     
-    mapped_value = int((value+60) / 120 * 14)
-    return mapped_value
+    mapped_value = int((value+65)/ 130 * 20)+1
+    if mapped_value > 16:
+        mapped_value = 16
+    return mapped_value 
     
 def put_message(image, msg_cnt=1, msg=['test'], show=False):
     top_left_x = 0

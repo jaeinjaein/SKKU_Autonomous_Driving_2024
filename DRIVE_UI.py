@@ -13,7 +13,7 @@ from PyQt5.QtCore import QTimer, Qt
 import threading
 import numpy as np
 import serial.tools.list_ports
-from inference import inference_image, RunningAverage, inf_angle
+from inference import inference_image, RunningAverage, inf_angle, inf_angle_mainline
 from ultralytics import YOLO
 import time
 import serial
@@ -31,7 +31,7 @@ class CamNode(Node):
         self.cap = None
         self.timer = None
         self.cv_image = None
-        self.model = YOLO('./last.engine', task='segment')
+        self.model = YOLO('./models/yolov8n-ep200-frz-d1.pt', task='segment')
         self.running_average = RunningAverage()
         self.create_blank_image()
         self.record = False
@@ -76,9 +76,22 @@ class CamNode(Node):
         if ret:
             self.update_image_cam(frame, 0)
             try:
-                img_inferenced, _, line1_ang, line2_ang = inf_angle(self.model, frame, self.running_average)
+                #img_inferenced, _, line1_ang, line2_ang = inf_angle(self.model, frame, self.running_average)
+                #steering_value = -9999.0
+                #print(frame.shape, img_inferenced.shape)
+                #if line1_ang != None:
+                #    steering_value = map_to_n_levels(line1_ang)
+                #    self.publish_angle(steering_value)
+                #elif line2_ang != None:
+                #    steering_value = map_to_n_levels(line2_ang)
+                #    self.publish_angle(steering_value)
+                #img_inferenced = put_message(img_inferenced, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
+                #self.update_image_cam(img_inferenced, 1)
+                #if self.record:
+                #    self.writer_orig.write(frame)
+                #    self.writer_inferenced.write(img_inferenced)
+                img_inferenced, line1_ang, line2_ang = inf_angle_mainline(self.model, frame)
                 steering_value = -9999.0
-                print(frame.shape, img_inferenced.shape)
                 if line1_ang != None:
                     steering_value = map_to_n_levels(line1_ang)
                     self.publish_angle(steering_value)
@@ -86,11 +99,11 @@ class CamNode(Node):
                     steering_value = map_to_n_levels(line2_ang)
                     self.publish_angle(steering_value)
                 img_inferenced = put_message(img_inferenced, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
-                self.update_image_cam(img_inferenced, 1)
+                
                 if self.record:
                     self.writer_orig.write(frame)
                     self.writer_inferenced.write(img_inferenced)
-                
+                self.update_image_cam(img_inferenced, 1)
             except CvBridgeError as e:
                 self.get_logger().error(f"Error converting OpenCV image to ROS Image message: {e}")
     def publish_angle(self, value):
@@ -418,7 +431,7 @@ class MyApp(QWidget):
         if self.checkboxTest.isChecked():
             if self.cam_node.cap is not None:
                 self.cam_node.stop_cam()
-            video_path = './yolov8-seg/1_1415.mp4'
+            video_path = './videos/orig/2024-07-03-060729.mp4'
             self.cam_node.start_video(video_path)
             
 
