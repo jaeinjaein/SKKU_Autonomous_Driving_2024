@@ -5,6 +5,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 device_vp = [('Lidar', '1A86:7523'), ('Arduino', '2A03:0042')]
+angle_min, angle_max = -75, 75
+steering_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+bev_height_offset = 0.1  # bigger --> higher
+bev_width_offset = 0.27  # bigger --> narrow
+save_statistics = True
+
 
 def cam_capture():
     capture = cv2.VideoCapture(0)
@@ -33,16 +39,17 @@ def drive_datas():
     return os.listdir('../cam_dataset')
     
 def convert_bev(image):
+    global bev_width_offset, bev_height_offset
     # 원본 이미지의 크기를 가져옵니다.
     height, width = image.shape[:2]
 
     # 변환 전 후의 4개의 지점을 정의합니다.
     # 변환 전 지점들 (예시 좌표입니다. 실제 도로 사진에 맞게 조정해야 합니다)
     src_points = np.float32([
-        [int(width * 0.27), height * 0.25], 
-        [int(width * 0.73), height * 0.25], 
-        [width * 0, height * 0.75], 
-        [width * 1, height * 0.75]
+        [int(width * bev_width_offset), height * (0.5 - bev_height_offset)], 
+        [int(width * (1.0 - bev_width_offset)), height * (0.5 - bev_height_offset)], 
+        [width * 0, height * (1.0 - bev_height_offset)], 
+        [width * 1, height * (1.0 - bev_height_offset)]
     ])
 
     # 변환 후 지점들
@@ -61,15 +68,15 @@ def convert_bev(image):
     return bird_eye_view
 
 def convert_bev_points(image, points):
-    
+    global bev_width_offset, bev_height_offset
     height, width = image.shape[:2]
     # 변환 전 후의 4개의 지점을 정의합니다.
     # 변환 전 지점들 (예시 좌표입니다. 실제 도로 사진에 맞게 조정해야 합니다)
     src_points = np.float32([
-        [int(width * 0.27), height * 0.25], 
-        [int(width * 0.73), height * 0.25], 
-        [width * 0, height * 0.75], 
-        [width * 1, height * 0.75]
+        [int(width * bev_width_offset), height * (0.5 - bev_height_offset)], 
+        [int(width * (1.0 - bev_width_offset)), height * (0.5 - bev_height_offset)], 
+        [width * 0, height * (1.0 - bev_height_offset)], 
+        [width * 1, height * (1.0 - bev_height_offset)]
     ])
 
     # 변환 후 지점들
@@ -118,3 +125,16 @@ def put_message(image, msg_cnt=1, msg=['test'], show=False):
         cv2.destroyAllWindows()
         cv2.imwrite('output_image.jpg', image)
     return image
+    
+def map_to_steering(value):
+    global angle_min, angle_max, steering_values
+    if value < angle_min:
+        value = angle_min
+    elif value > angle_max:
+        value = angle_max
+    step = (angle_max - angle_min) / 21
+    index = int((value - angle_min) // step)
+    #if index == 20 and value == max_val:
+    #    index = 19
+    
+    return index, steering_values[index]

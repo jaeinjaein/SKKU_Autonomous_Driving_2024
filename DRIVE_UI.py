@@ -3,7 +3,7 @@ import sys
 import cv2
 import rclpy
 from rclpy.node import Node
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from cv_bridge import CvBridge, CvBridgeError
@@ -17,7 +17,7 @@ from inference import inference_image, RunningAverage, inf_angle, inf_angle_main
 from ultralytics import YOLO
 import time
 import serial
-from util.tools import map_to_n_levels, put_message
+from util.tools import map_to_n_levels, put_message, map_to_steering
 
 ard_list = []
 
@@ -37,6 +37,8 @@ class CamNode(Node):
         self.record = False
         self.writer_orig = None
         self.writer_inferenced = None
+        self.statistics_list = []
+        self.save_statistics = True
 
     def start_camera(self, device_index):
         if self.cap is not None:
@@ -47,6 +49,7 @@ class CamNode(Node):
         self.cap.set(cv2.CAP_PROP_FPS, 20)
         if self.timer is not None:
             self.timer.cancel()
+        self.statistics_list = []
         self.timer = self.create_timer(1.0 / 20.0, self.publish_camera_frame)
         if self.record:
             local_time = time.localtime()
@@ -60,7 +63,7 @@ class CamNode(Node):
     
     def update_image_cam(self, img, pos):
         # Resize the incoming image to fit into the top-left quadrant (640x360)
-        # resized_img = cv2.resize(img, (640, 360))
+        resized_img = cv2.resize(img, (640, 360))
         if pos == 0:
             self.cv_image[0:360, :640] = resized_img
         elif pos == 1:
@@ -94,10 +97,14 @@ class CamNode(Node):
                 
             steering_value = -9999.0
             if line1_ang != None:
-                steering_value = map_to_n_levels(line1_ang)
+                idx, steering_value = map_to_steering(line1_ang)
+                if self.save_statistics:
+                    self.statistics_list.append([idx, steering_value])
                 self.publish_angle(steering_value)
             elif line2_ang != None:
-                steering_value = map_to_n_levels(line2_ang)
+                idx, steering_value = map_to_steering(line2_ang)
+                if self.save_statistics:
+                    self.statistics_list.append([idx, steering_value])
                 self.publish_angle(steering_value)
             img_inferenced = put_message(img_inferenced, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
                 
@@ -118,6 +125,12 @@ class CamNode(Node):
         self.cap = cv2.VideoCapture(video_path)
         if self.timer is not None:
             self.timer.cancel()
+        if self.save_statistics and len(self.statistics_list) > 0:
+            local_time = time.localtime()
+            formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
+            save_array = np.array(self.statistics_list)
+            np.save(f'./log/steering_log/{formatted_time}_steering', save_array)
+        self.statistics_list = []
         self.timer = self.create_timer(1.0 / 20.0, self.publish_camera_frame)
         if self.record:
             local_time = time.localtime()
@@ -132,6 +145,11 @@ class CamNode(Node):
             self.cap.release()
             
     def stop_cam(self):
+        if self.save_statistics and len(self.statistics_list) > 0:
+            local_time = time.localtime()
+            formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
+            save_array = np.array(self.statistics_list)
+            np.save(f'./log/steering_log/{formatted_time}_steering', save_array)
         if self.cap is not None:
             self.cap.release()
         if self.timer is not None:
@@ -492,18 +510,22 @@ def main(args=None):
     ard_node = ArdNode()
 
     nodes = [main_node, lidar_node, ard_node]
-    executor = MultiThreadedExecutor()
     
+    executor1 = MultiThreadedExecutor()
     for node in nodes:
-        executor.add_node(node)
+        executor1.add_node(node)
+        
+    executor2 = SingleThreadedExecutor()
+    executor2.add_node(cam_node)
+    
 
     app = QApplication(sys.argv)
     nodes.append(cam_node)
     ex = MyApp(nodes)
     
     # Spin ROS node in a separate thread to avoid blocking the main thread
-    thread = threading.Thread(target=executor.spin, daemon=True)
-    thread_cam = threading.Thread(target=rclpy.spin, args=(cam_node,), daemon=True)
+    thread = threading.Thread(target=executor1.spin, daemon=True)
+    thread_cam = threading.Thread(target=executor2.spin, daemon=True)
     thread.start()
     thread_cam.start()
     

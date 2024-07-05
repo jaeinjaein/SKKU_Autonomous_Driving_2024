@@ -76,10 +76,10 @@ def inf_angle_mainline(model, image):
         line1_pts_x, line1_pts_y = line1_pts[:,0], line1_pts[:,1]
         degree = 1
         p_r = Polynomial.fit(line1_pts_y, line1_pts_x, degree)
-        y_r = np.linspace(h//2, h, 50)
-        x_r = p_r(y_r)
-        for i, _ in enumerate(x_r):
-            cv2.circle(image, (int(x_r[i]), int(y_r[i])), 5, (255, 0, 0), -1)
+        #y_r = np.linspace(h//2, h, 50)
+        #x_r = p_r(y_r)
+        #for i, _ in enumerate(x_r):
+        #    cv2.circle(image, (int(x_r[i]), int(y_r[i])), 5, (255, 0, 0), -1)
         point_r1 = [p_r(h * SAMPLING_RATE), h * SAMPLING_RATE]
         point_r2 = [p_r(h * SAMPLING_RATE + 0.01), h * SAMPLING_RATE + 0.01]
         line1_ang = math.degrees(math.atan((point_r2[0] - point_r1[0]) / (point_r1[1] - point_r2[1])))
@@ -91,10 +91,10 @@ def inf_angle_mainline(model, image):
         line2_pts_x, line2_pts_y = line2_pts[:,0], line2_pts[:,1]
         degree = 1
         p_l = Polynomial.fit(line2_pts_y, line2_pts_x, degree)
-        y_l = np.linspace(h//2, h, 50)
-        x_l = p_l(y_l)
-        for i, _ in enumerate(x_l):
-            cv2.circle(image, (int(x_l[i]), int(y_l[i])), 5, (0,255,0), -1)
+        #y_l = np.linspace(h//2, h, 50)
+        #x_l = p_l(y_l)
+        #for i, _ in enumerate(x_l):
+        #    cv2.circle(image, (int(x_l[i]), int(y_l[i])), 5, (0,255,0), -1)
         point_l1 = [p_l(h * SAMPLING_RATE), h * SAMPLING_RATE]
         point_l2 = [p_l(h * SAMPLING_RATE + 0.01), h * SAMPLING_RATE + 0.01]
         line2_ang = math.degrees(math.atan((point_l2[0] - point_l1[0]) / (point_l1[1] - point_l2[1])))
