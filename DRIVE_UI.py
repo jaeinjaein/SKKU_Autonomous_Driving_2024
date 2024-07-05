@@ -31,7 +31,7 @@ class CamNode(Node):
         self.cap = None
         self.timer = None
         self.cv_image = None
-        self.model = YOLO('./models/yolov8n-ep200-frz-d1.pt', task='segment')
+        self.model = YOLO('./last.engine', task='segment')
         self.running_average = RunningAverage()
         self.create_blank_image()
         self.record = False
@@ -42,8 +42,9 @@ class CamNode(Node):
         if self.cap is not None:
             self.cap.release()
         self.cap = cv2.VideoCapture(device_index)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+        self.cap.set(cv2.CAP_PROP_FPS, 20)
         if self.timer is not None:
             self.timer.cancel()
         self.timer = self.create_timer(1.0 / 20.0, self.publish_camera_frame)
@@ -59,9 +60,9 @@ class CamNode(Node):
     
     def update_image_cam(self, img, pos):
         # Resize the incoming image to fit into the top-left quadrant (640x360)
-        resized_img = cv2.resize(img, (640, 360))
+        # resized_img = cv2.resize(img, (640, 360))
         if pos == 0:
-            self.cv_image[0:360, 0:640] = resized_img
+            self.cv_image[0:360, :640] = resized_img
         elif pos == 1:
             self.cv_image[0:360, 640:] = resized_img
         elif pos == 2:
@@ -75,7 +76,6 @@ class CamNode(Node):
         ret, frame = self.cap.read()
         if ret:
             self.update_image_cam(frame, 0)
-            try:
                 #img_inferenced, _, line1_ang, line2_ang = inf_angle(self.model, frame, self.running_average)
                 #steering_value = -9999.0
                 #print(frame.shape, img_inferenced.shape)
@@ -90,22 +90,22 @@ class CamNode(Node):
                 #if self.record:
                 #    self.writer_orig.write(frame)
                 #    self.writer_inferenced.write(img_inferenced)
-                img_inferenced, line1_ang, line2_ang = inf_angle_mainline(self.model, frame)
-                steering_value = -9999.0
-                if line1_ang != None:
-                    steering_value = map_to_n_levels(line1_ang)
-                    self.publish_angle(steering_value)
-                elif line2_ang != None:
-                    steering_value = map_to_n_levels(line2_ang)
-                    self.publish_angle(steering_value)
-                img_inferenced = put_message(img_inferenced, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
+            img_inferenced, line1_ang, line2_ang = inf_angle_mainline(self.model, frame)
                 
-                if self.record:
-                    self.writer_orig.write(frame)
-                    self.writer_inferenced.write(img_inferenced)
-                self.update_image_cam(img_inferenced, 1)
-            except CvBridgeError as e:
-                self.get_logger().error(f"Error converting OpenCV image to ROS Image message: {e}")
+            steering_value = -9999.0
+            if line1_ang != None:
+                steering_value = map_to_n_levels(line1_ang)
+                self.publish_angle(steering_value)
+            elif line2_ang != None:
+                steering_value = map_to_n_levels(line2_ang)
+                self.publish_angle(steering_value)
+            img_inferenced = put_message(img_inferenced, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
+                
+            if self.record:
+                self.writer_orig.write(frame)
+                self.writer_inferenced.write(img_inferenced)
+            self.update_image_cam(img_inferenced, 1)
+            
     def publish_angle(self, value):
         data = 'angle%02d;' % value
         msg = String()
@@ -258,7 +258,7 @@ class MainNode(Node):
 class MyApp(QWidget):
     def __init__(self, ros_nodes):
         super().__init__()
-        self.main_node, self.cam_node, self.lidar_node, self.ard_node = ros_nodes
+        self.main_node, self.lidar_node, self.ard_node, self.cam_node = ros_nodes
         self.cam_conn, self.lidar_conn, self.ard_conn = False, False, False
         self.initUI()
 
@@ -350,7 +350,7 @@ class MyApp(QWidget):
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.updateImage)
-        self.timer.start(100)  # Update the image every 100 ms
+        self.timer.start(30)  # Update the image every 100 ms
         
         self.show()
 
@@ -491,17 +491,21 @@ def main(args=None):
     lidar_node = LidarNode()
     ard_node = ArdNode()
 
-    nodes = [main_node, cam_node, lidar_node, ard_node]
+    nodes = [main_node, lidar_node, ard_node]
     executor = MultiThreadedExecutor()
+    
     for node in nodes:
         executor.add_node(node)
 
     app = QApplication(sys.argv)
+    nodes.append(cam_node)
     ex = MyApp(nodes)
     
     # Spin ROS node in a separate thread to avoid blocking the main thread
     thread = threading.Thread(target=executor.spin, daemon=True)
+    thread_cam = threading.Thread(target=rclpy.spin, args=(cam_node,), daemon=True)
     thread.start()
+    thread_cam.start()
     
     sys.exit(app.exec_())
 

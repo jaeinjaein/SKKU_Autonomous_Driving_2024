@@ -11,7 +11,7 @@ MAKE_LOG = False
 LOG_FOLDER = './log/meanline'
 HEIGHT_CROP = (540, 1000)
 
-SAMPLING_RATE = 0.8
+SAMPLING_RATE = 0.7
 
 class RunningAverage:
     def __init__(self):
@@ -54,7 +54,9 @@ def find_sideline(image, xy_list, box_crop_min_x, box_crop_min_y, box_crop_max_x
 
 
 def inf_angle_mainline(model, image):
+    orig_h, orig_w = image.shape[:2]
     line1_ang, line2_ang = None, None
+    #image = cv2.resize(image, (640, 360))
     results = model(image, conf=0.2, half=True)
     image = results[0].plot()
     
@@ -72,7 +74,7 @@ def inf_angle_mainline(model, image):
         line1_pts = tools.convert_bev_points(image, line1_pts.reshape(-1, 1, 2))
         line1_pts = line1_pts.reshape(-1,2)
         line1_pts_x, line1_pts_y = line1_pts[:,0], line1_pts[:,1]
-        degree = 2
+        degree = 1
         p_r = Polynomial.fit(line1_pts_y, line1_pts_x, degree)
         y_r = np.linspace(h//2, h, 50)
         x_r = p_r(y_r)
@@ -87,7 +89,7 @@ def inf_angle_mainline(model, image):
         line2_pts = tools.convert_bev_points(image, line2_pts.reshape(-1, 1, 2))
         line2_pts = line2_pts.reshape(-1,2)
         line2_pts_x, line2_pts_y = line2_pts[:,0], line2_pts[:,1]
-        degree = 2
+        degree = 1
         p_l = Polynomial.fit(line2_pts_y, line2_pts_x, degree)
         y_l = np.linspace(h//2, h, 50)
         x_l = p_l(y_l)
@@ -96,6 +98,7 @@ def inf_angle_mainline(model, image):
         point_l1 = [p_l(h * SAMPLING_RATE), h * SAMPLING_RATE]
         point_l2 = [p_l(h * SAMPLING_RATE + 0.01), h * SAMPLING_RATE + 0.01]
         line2_ang = math.degrees(math.atan((point_l2[0] - point_l1[0]) / (point_l1[1] - point_l2[1])))
+    #image = cv2.resize(image, (orig_w, orig_h))
     return image, line1_ang, line2_ang
 
 def inf_angle(model, image, running_average):
