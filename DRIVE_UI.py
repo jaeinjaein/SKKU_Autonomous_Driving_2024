@@ -13,11 +13,12 @@ from PyQt5.QtCore import QTimer, Qt
 import threading
 import numpy as np
 import serial.tools.list_ports
-from inference import inference_image, RunningAverage, inf_angle, inf_angle_mainline
+from inference import inference_image, RunningAverage, inf_angle_mainline
 from ultralytics import YOLO
 import time
 import serial
 from util.tools import map_to_n_levels, put_message, map_to_steering
+import traceback
 
 ard_list = []
 
@@ -46,6 +47,7 @@ class CamNode(Node):
         self.angle_max = 80
         self.steering_values = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
         self.poly_degree = 2
+        self.fps = 10.0
 
     def start_camera(self, device_index):
         if self.cap is not None:
@@ -53,17 +55,17 @@ class CamNode(Node):
         self.cap = cv2.VideoCapture(device_index)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-        self.cap.set(cv2.CAP_PROP_FPS, 5)
+        self.cap.set(cv2.CAP_PROP_FPS, int(self.fps))
         if self.timer is not None:
             self.timer.cancel()
         self.statistics_list = []
-        self.timer = self.create_timer(1.0 / 5.0, self.publish_camera_frame)
+        self.timer = self.create_timer(1.0 / self.fps, self.publish_camera_frame)
         if self.record:
             local_time = time.localtime()
             formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, 20.0, (1920, 1080))
-            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, 20.0, (1920, 1080))
+            self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
+            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
 
     def create_blank_image(self):
         self.cv_image = np.zeros((720, 1280, 3), dtype=np.uint8)
@@ -110,8 +112,10 @@ class CamNode(Node):
                 self.update_image_cam(drawed_img, 1)
                 t2 = time.time_ns()
                 print(f"inference time : {(t2 - t1) / 1000000}ms")
-            except:
-                pass
+            except Exception as e:
+                print(f"An error occurred: {e}")
+                traceback.print_exc()
+                
     def publish_angle(self, value):
         data = 'angle%02d;' % value
         msg = String()
@@ -130,13 +134,13 @@ class CamNode(Node):
             save_array = np.array(self.statistics_list)
             np.save(f'./log/steering_log/{formatted_time}_steering', save_array)
         self.statistics_list = []
-        self.timer = self.create_timer(1.0 / 5.0, self.publish_camera_frame)
+        self.timer = self.create_timer(1.0 / self.fps, self.publish_camera_frame)
         if self.record:
             local_time = time.localtime()
             formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, 20.0, (640, 360))
-            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, 20.0, (640, 360))
+            self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
+            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
 
     def destroy_node(self):
         super().destroy_node()

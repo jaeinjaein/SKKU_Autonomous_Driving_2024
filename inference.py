@@ -32,26 +32,11 @@ def convert_ats(angle):
     return steering
 
 
-def find_sideline(image, xy_list, box_crop_min_x, box_crop_min_y, box_crop_max_x, box_crop_max_y):
-    # 직선을 찾음
-    x = list()
-    y = list()
-    result = None
+def find_sideline(xy_list, box_crop_min_x, box_crop_min_y, box_crop_max_x, box_crop_max_y):
+    result = []
     for ptr in xy_list:
         if (box_crop_min_x <= ptr[0] <= box_crop_max_x) and (box_crop_min_y <= ptr[1] <= box_crop_max_y):
-            x.append(int(ptr[0]))
-            y.append(int(ptr[1]))
-    x, y = np.array(y),np.array(x)
-    if len(x) != 0:
-        try:
-            degree = 1
-            p = Polynomial.fit(x, y, degree)
-            for x, y in zip(y,x):
-                cv2.circle(image, (int(x), int(y)), 10, (255,255,255), -1)
-            if True:
-                result = p
-        except:
-            print("frm error")
+            result.append(ptr)
     return result
 
 
@@ -113,56 +98,6 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
     print(f"t3 - t2 : {(t3 - t2) / 1000000}ms")
     return image, drawed_img, line1_ang, line2_ang
 
-def inf_angle(model, image, running_average):
-    p1, p2 = None, None
-    point_left, point_mid, point_right = None, None, None
-    line1_ang, line2_ang = -9999.0,-9999.0
-    line1_pts, line2_pts = np.array([]), np.array([])
-    results = model(image, conf=0.2, half=True)
-    image = results[0].plot()
-
-    h, w, c = image.shape
-    #for idx, box in enumerate(results[0].boxes):
-        #if box.cls == 4:
-        #    return
-    for idx, box in enumerate(results[0].boxes):
-        if box.cls == 2:
-            #calculate_mainline(image, results[0].masks[idx].xy[0])
-            p1 = find_sideline(image, results[0].masks[idx].xy[0], w * 0.5, h * 0.75, w, h * 0.9)
-            if p1 != None:
-                x_1 = np.linspace(h//2, h, 50)
-                y_1 = p1(x_1)
-                #for x_p, y_p in zip(x_1, y_1):
-                #    cv2.circle(image, (int(y_p), int(x_p)), 5, (0,255,0), -1)
-
-                line1_pts = tools.convert_bev_points(image, np.array(list(zip(y_1,x_1))).reshape(-1,1,2))
-
-                point_right = (int(p1(h-1)), h-1)
-                #cv2.circle(image, point_right, 10, (255,255,255), -1)
-
-            p2 = find_sideline(image, results[0].masks[idx].xy[0], 0, h * 0.75, w * 0.5, h * 0.9)
-            if p2 != None:
-                x_2 = np.linspace(h//2, h, 50)
-                y_2 = p2(x_2)
-                #for x_p, y_p in zip(x_2, y_2):
-                #    cv2.circle(image, (int(y_p), int(x_p)), 5, (255,0,0), -1)
-                line2_pts = tools.convert_bev_points(image, np.array(list(zip(y_2,x_2))).reshape(-1,1,2))
-                point_left = (int(p2(h-1)), h-1)
-                cv2.circle(image, point_left, 10, (255,255,255), -1)
-    image = tools.convert_bev(image)
-    if len(line1_pts) >= 2:
-        line1_ang = math.degrees(math.atan((line1_pts[1][0][0] - line1_pts[0][0][0]) / (line1_pts[0][0][1] - line1_pts[1][0][1])))
-    if len(line2_pts) >= 2:
-        line2_ang = math.degrees(math.atan((line2_pts[1][0][0] - line2_pts[0][0][0]) / (line2_pts[0][0][1] - line2_pts[1][0][1])))
-
-    #print(line1_ang, line2_ang)
-    #cv2.imshow('', image)
-    #cv2.waitKey(10)
-    return image, point_mid, line1_ang, line2_ang
-
-
-
-
 def calculate_mainline(image_size, segment_points, SAMPLING_RATE):
     h, w = image_size
     segment_points = sorted(segment_points, key=lambda x : x[1], reverse=True)
@@ -189,6 +124,9 @@ def calculate_mainline(image_size, segment_points, SAMPLING_RATE):
                 break
         if y_o <= h * (SAMPLING_RATE - 0.3):
             break
+    if len(line_r) < 2 and len(line_l) < 2:
+        line_r = find_sideline(segment_points, w * 0.5, h * (SAMPLING_RATE - 0.3), w, h * SAMPLING_RATE)
+        line_l = find_sideline(segment_points, 0, h * (SAMPLING_RATE - 0.3), w * 0.5, h * SAMPLING_RATE)
     return line_r, line_l
                 
     #x, y = np.array(y),np.array(x)
