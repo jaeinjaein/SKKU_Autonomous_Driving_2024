@@ -5,10 +5,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 device_vp = [('Lidar', '1A86:7523'), ('Arduino', '2A03:0042')]
-angle_min, angle_max = -75, 75
-steering_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-bev_height_offset = 0.1  # bigger --> higher
-bev_width_offset = 0.27  # bigger --> narrow
+#angle_min, angle_max = -80, 80
+#steering_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 16, 17, 17, 17]
+#bev_height_offset = 0.20 # bigger --> higher
+#bev_width_offset = 0.27  # bigger --> narrow
 save_statistics = True
 
 
@@ -38,8 +38,7 @@ def lidar_datas():
 def drive_datas():
     return os.listdir('../cam_dataset')
     
-def convert_bev(image):
-    global bev_width_offset, bev_height_offset
+def convert_bev(image, bev_width_offset, bev_height_offset):
     # 원본 이미지의 크기를 가져옵니다.
     height, width = image.shape[:2]
 
@@ -67,8 +66,7 @@ def convert_bev(image):
     bird_eye_view = cv2.warpPerspective(image, matrix, (width, height))
     return bird_eye_view
 
-def convert_bev_points(image, points):
-    global bev_width_offset, bev_height_offset
+def convert_bev_points(image, points, bev_width_offset, bev_height_offset):
     height, width = image.shape[:2]
     # 변환 전 후의 4개의 지점을 정의합니다.
     # 변환 전 지점들 (예시 좌표입니다. 실제 도로 사진에 맞게 조정해야 합니다)
@@ -126,8 +124,7 @@ def put_message(image, msg_cnt=1, msg=['test'], show=False):
         cv2.imwrite('output_image.jpg', image)
     return image
     
-def map_to_steering(value):
-    global angle_min, angle_max, steering_values
+def map_to_steering(value, angle_min, angle_max, steering_values):
     if value < angle_min:
         value = angle_min
     elif value > angle_max:

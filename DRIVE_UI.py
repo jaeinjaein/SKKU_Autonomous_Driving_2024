@@ -39,6 +39,13 @@ class CamNode(Node):
         self.writer_inferenced = None
         self.statistics_list = []
         self.save_statistics = True
+        self.SAMPLING_RATE = 0.8
+        self.bev_height_offset = 0.2
+        self.bev_width_offset = 0.27
+        self.angle_min = -80
+        self.angle_max = 80
+        self.steering_values = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+        self.poly_degree = 2
 
     def start_camera(self, device_index):
         if self.cap is not None:
@@ -46,11 +53,11 @@ class CamNode(Node):
         self.cap = cv2.VideoCapture(device_index)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-        self.cap.set(cv2.CAP_PROP_FPS, 20)
+        self.cap.set(cv2.CAP_PROP_FPS, 5)
         if self.timer is not None:
             self.timer.cancel()
         self.statistics_list = []
-        self.timer = self.create_timer(1.0 / 20.0, self.publish_camera_frame)
+        self.timer = self.create_timer(1.0 / 5.0, self.publish_camera_frame)
         if self.record:
             local_time = time.localtime()
             formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
@@ -78,41 +85,33 @@ class CamNode(Node):
             return
         ret, frame = self.cap.read()
         if ret:
-            self.update_image_cam(frame, 0)
-                #img_inferenced, _, line1_ang, line2_ang = inf_angle(self.model, frame, self.running_average)
-                #steering_value = -9999.0
-                #print(frame.shape, img_inferenced.shape)
-                #if line1_ang != None:
-                #    steering_value = map_to_n_levels(line1_ang)
-                #    self.publish_angle(steering_value)
-                #elif line2_ang != None:
-                #    steering_value = map_to_n_levels(line2_ang)
-                #    self.publish_angle(steering_value)
-                #img_inferenced = put_message(img_inferenced, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
-                #self.update_image_cam(img_inferenced, 1)
-                #if self.record:
-                #    self.writer_orig.write(frame)
-                #    self.writer_inferenced.write(img_inferenced)
-            img_inferenced, line1_ang, line2_ang = inf_angle_mainline(self.model, frame)
+            t1 = time.time_ns()
+            try:
+                self.update_image_cam(frame, 0)
+                img_inferenced, line1_ang, line2_ang = inf_angle_mainline(self.model, frame, self.SAMPLING_RATE, self.bev_width_offset, self.bev_height_offset, self.poly_degree)
+                steering_value = -9999.0
+                if line1_ang != None:
+                    idx, steering_value = map_to_steering(line1_ang, self.angle_min, self.angle_max, self.steering_values)
+                    if self.save_statistics:
+                        self.statistics_list.append([idx, steering_value])
+                    self.publish_angle(steering_value)
+                elif line2_ang != None:
+                    idx, steering_value = map_to_steering(line2_ang)
+                    if self.save_statistics:
+                        self.statistics_list.append([idx, steering_value])
+                    self.publish_angle(steering_value)
+                #else:
+                    
+                img_inferenced = put_message(img_inferenced, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
                 
-            steering_value = -9999.0
-            if line1_ang != None:
-                idx, steering_value = map_to_steering(line1_ang)
-                if self.save_statistics:
-                    self.statistics_list.append([idx, steering_value])
-                self.publish_angle(steering_value)
-            elif line2_ang != None:
-                idx, steering_value = map_to_steering(line2_ang)
-                if self.save_statistics:
-                    self.statistics_list.append([idx, steering_value])
-                self.publish_angle(steering_value)
-            img_inferenced = put_message(img_inferenced, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
-                
-            if self.record:
-                self.writer_orig.write(frame)
-                self.writer_inferenced.write(img_inferenced)
-            self.update_image_cam(img_inferenced, 1)
-            
+                if self.record:
+                    self.writer_orig.write(frame)
+                    self.writer_inferenced.write(img_inferenced)
+                self.update_image_cam(img_inferenced, 1)
+            except:
+                pass
+            t2 = time.time_ns()
+            print(f"inference time : {(t2 - t1) / 1000000}ms")
     def publish_angle(self, value):
         data = 'angle%02d;' % value
         msg = String()
@@ -131,13 +130,13 @@ class CamNode(Node):
             save_array = np.array(self.statistics_list)
             np.save(f'./log/steering_log/{formatted_time}_steering', save_array)
         self.statistics_list = []
-        self.timer = self.create_timer(1.0 / 20.0, self.publish_camera_frame)
+        self.timer = self.create_timer(1.0 / 5.0, self.publish_camera_frame)
         if self.record:
             local_time = time.localtime()
             formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, 20.0, (1280, 720))
-            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, 20.0, (1280, 720))
+            self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, 20.0, (640, 360))
+            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, 20.0, (640, 360))
 
     def destroy_node(self):
         super().destroy_node()
@@ -157,6 +156,28 @@ class CamNode(Node):
         if self.record:
             self.writer_orig.release()
             self.writer_inferenced.release()
+            
+    def load_params(self):
+        with open('params.txt', 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                line = line.rstrip()
+                name, val = line.split('=')
+                if name == 'steering':
+                    self.steering_values = list(map(int, val.split(',')))
+                elif name == 'SAMPLING_RATE':
+                    self.SAMPLING_RATE = float(val)
+                elif name == 'bev_height_offset':
+                    self.bev_height_offset = float(val)
+                elif name == 'bev_width_offset':
+                    self.bev_width_offset = float(val)
+                elif name == 'angle_min':
+                    self.angle_min = int(val)
+                elif name == 'angle_max':
+                    self.angle_max = int(val)
+                elif name == 'poly_degree':
+                    self.poly_degree = int(val)
+                print(f'{name} param updated with value : {val}')
 
 class LidarNode(Node):
     def __init__(self):
@@ -262,7 +283,7 @@ class MainNode(Node):
             data += '+'
         else:
             data += '-'
-        data += '%03d;' % value
+        data += '%03d;' % self.abs_value(value)
         msg = String()
         msg.data = data
         self.pta_publisher.publish(msg)
@@ -272,6 +293,12 @@ class MainNode(Node):
         msg = String()
         msg.data = data
         self.pta_publisher.publish(msg)
+    
+    def abs_value(self, value):
+        if value >= 0:
+            return value
+        else:
+            return -1 * value
         
 class MyApp(QWidget):
     def __init__(self, ros_nodes):
@@ -340,20 +367,26 @@ class MyApp(QWidget):
         self.speed150Button = QPushButton('Speed : 150')
         self.speed080Button = QPushButton('Speed : 80')
         self.speed000Button = QPushButton('Speed : 0')
+        self.speedm150Button = QPushButton('Speed : -150')
         self.settingAngleButton = QPushButton('Car Angle Setting')
+        self.updateCamParamButton = QPushButton('Update CAM Parameters')
         self.TestStartButton.clicked.connect(self.TestStartButtonClicked)
         self.speed255Button.clicked.connect(self.speed255ButtonClicked)
         self.speed150Button.clicked.connect(self.speed150ButtonClicked)
         self.speed080Button.clicked.connect(self.speed080ButtonClicked)
         self.speed000Button.clicked.connect(self.speed000ButtonClicked)
+        self.speedm150Button.clicked.connect(self.speedm150ButtonClicked)
         self.settingAngleButton.clicked.connect(self.settingAngleButtonClicked)
+        self.updateCamParamButton.clicked.connect(self.updateCamParamButtonClicked)
         rightBottomLayout = QVBoxLayout()
         rightBottomLayout.addWidget(self.TestStartButton)
         rightBottomLayout.addWidget(self.speed255Button)
         rightBottomLayout.addWidget(self.speed150Button)
         rightBottomLayout.addWidget(self.speed080Button)
         rightBottomLayout.addWidget(self.speed000Button)
+        rightBottomLayout.addWidget(self.speedm150Button)
         rightBottomLayout.addWidget(self.settingAngleButton)
+        rightBottomLayout.addWidget(self.updateCamParamButton)
         
         self.rightBottomGroup.setLayout(rightBottomLayout)
 
@@ -384,11 +417,10 @@ class MyApp(QWidget):
 
     def populateCamComboBox(self, comboBox):
         index = 0
-        while True:
+        while index < 10:
             cap = cv2.VideoCapture(index)
-            if not cap.read()[0]:
-                break
-            comboBox.addItem(str(index))
+            if cap.read()[0]:
+                comboBox.addItem(str(index))
             cap.release()
             index += 1
 
@@ -480,6 +512,9 @@ class MyApp(QWidget):
         
     def speed000ButtonClicked(self):
         self.main_node.publish_speed(0)
+    
+    def speedm150ButtonClicked(self):
+        self.main_node.publish_speed(-150)
         
     def settingAngleButtonClicked(self):
         self.main_node.publish_setting()
@@ -489,7 +524,6 @@ class MyApp(QWidget):
             "echo 'dlwodls8747' | sudo -S chmod 777 /dev/ttyUSB*",
             "echo 'dlwodls8747' | sudo -S chmod 777 /dev/ttyACM*"
         ]
-
         # 각 명령어 실행
         for command in commands:
             result = subprocess.run(command, shell=True, capture_output=True, text=True)
@@ -499,6 +533,9 @@ class MyApp(QWidget):
         self.populateCamComboBox(self.camComboBox)
         self.populateSerialComboBox(self.ardComboBox)
         self.populateSerialComboBox(self.lidarComboBox)
+    
+    def updateCamParamButtonClicked(self):
+        self.cam_node.load_params()
         
         
 
@@ -521,6 +558,7 @@ def main(args=None):
 
     app = QApplication(sys.argv)
     nodes.append(cam_node)
+    cam_node.load_params()
     ex = MyApp(nodes)
     
     # Spin ROS node in a separate thread to avoid blocking the main thread
