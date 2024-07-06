@@ -70,7 +70,9 @@ class CamNode(Node):
     
     def update_image_cam(self, img, pos):
         # Resize the incoming image to fit into the top-left quadrant (640x360)
-        resized_img = cv2.resize(img, (640, 360))
+        h, w = img.shape[:2]
+        if h != 360 or w != 640:
+            resized_img = cv2.resize(img, (640, 360))
         if pos == 0:
             self.cv_image[0:360, :640] = resized_img
         elif pos == 1:
@@ -85,10 +87,10 @@ class CamNode(Node):
             return
         ret, frame = self.cap.read()
         if ret:
-            t1 = time.time_ns()
             try:
-                self.update_image_cam(frame, 0)
-                img_inferenced, line1_ang, line2_ang = inf_angle_mainline(self.model, frame, self.SAMPLING_RATE, self.bev_width_offset, self.bev_height_offset, self.poly_degree)
+                t1 = time.time_ns()
+                img_inferenced, drawed_img, line1_ang, line2_ang = inf_angle_mainline(self.model, frame, self.SAMPLING_RATE, self.bev_width_offset, self.bev_height_offset, self.poly_degree)
+                self.update_image_cam(img_inferenced, 0)
                 steering_value = -9999.0
                 if line1_ang != None:
                     idx, steering_value = map_to_steering(line1_ang, self.angle_min, self.angle_max, self.steering_values)
@@ -100,18 +102,16 @@ class CamNode(Node):
                     if self.save_statistics:
                         self.statistics_list.append([idx, steering_value])
                     self.publish_angle(steering_value)
-                #else:
-                    
-                img_inferenced = put_message(img_inferenced, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
+                drawed_img = put_message(drawed_img, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
                 
                 if self.record:
                     self.writer_orig.write(frame)
-                    self.writer_inferenced.write(img_inferenced)
-                self.update_image_cam(img_inferenced, 1)
+                    self.writer_inferenced.write(drawed_img)
+                self.update_image_cam(drawed_img, 1)
+                t2 = time.time_ns()
+                print(f"inference time : {(t2 - t1) / 1000000}ms")
             except:
                 pass
-            t2 = time.time_ns()
-            print(f"inference time : {(t2 - t1) / 1000000}ms")
     def publish_angle(self, value):
         data = 'angle%02d;' % value
         msg = String()
@@ -163,20 +163,7 @@ class CamNode(Node):
             for line in lines:
                 line = line.rstrip()
                 name, val = line.split('=')
-                if name == 'steering':
-                    self.steering_values = list(map(int, val.split(',')))
-                elif name == 'SAMPLING_RATE':
-                    self.SAMPLING_RATE = float(val)
-                elif name == 'bev_height_offset':
-                    self.bev_height_offset = float(val)
-                elif name == 'bev_width_offset':
-                    self.bev_width_offset = float(val)
-                elif name == 'angle_min':
-                    self.angle_min = int(val)
-                elif name == 'angle_max':
-                    self.angle_max = int(val)
-                elif name == 'poly_degree':
-                    self.poly_degree = int(val)
+                exec(f'self.{line}')
                 print(f'{name} param updated with value : {val}')
 
 class LidarNode(Node):

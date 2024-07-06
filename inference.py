@@ -11,6 +11,8 @@ MAKE_LOG = False
 LOG_FOLDER = './log/meanline'
 HEIGHT_CROP = (540, 1000)
 
+INFERENCE_COLOR = [(0,0,255), (255,0,0), (0,255,0), (255,255,0), (0,255,255)]
+
 #SAMPLING_RATE = 0.8
 
 class RunningAverage:
@@ -54,49 +56,62 @@ def find_sideline(image, xy_list, box_crop_min_x, box_crop_min_y, box_crop_max_x
 
 
 def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height_offset, degree):
-    orig_h, orig_w = image.shape[:2]
+    global INFERENCE_COLOR
     line1_ang, line2_ang = None, None
-    #image = cv2.resize(image, (640, 360))
+    t0 = time.time_ns()
     results = model(image, conf=0.2, half=True)
-    image = results[0].plot()
-    
+    #image = results[0].plot()
     h, w, c = image.shape
+    drawed_img = np.zeros((h, w, 3), dtype=np.uint8)
     line1_pts, line2_pts = [], []
+    t1 = time.time_ns()
     for idx, box in enumerate(results[0].boxes):
+        if box.cls > 2:
+            continue
+        seg_points = results[0].masks[idx].xy[0]
+        #for seg_point in seg_points:
+        #    cv2.circle(image, (int(seg_point[0]), int(seg_point[1])), 5, INFERENCE_COLOR[int(box.cls)], -1)
         if box.cls == 2:
-            line1_pts, line2_pts = calculate_mainline(image, results[0].masks[idx].xy[0], SAMPLING_RATE)
-    image = tools.convert_bev(image, bev_width_offset, bev_height_offset)
+            line1_pts, line2_pts = calculate_mainline((h, w), seg_points, SAMPLING_RATE)
+    t2 = time.time_ns()
+    print(f"t2 - t1 : {(t2 - t1) / 1000000}ms")
+    #image = tools.convert_bev(image, bev_width_offset, bev_height_offset)
     if len(line1_pts) >= 2:
         line1_pts = np.array(line1_pts, dtype=np.float32)
-        line1_pts = tools.convert_bev_points(image, line1_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)
+        line1_pts = tools.convert_bev_points((h, w), line1_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)
         line1_pts = line1_pts.reshape(-1,2)
+        for line1_pt in line1_pts:
+            cv2.circle(drawed_img, (int(line1_pt[0]), int(line1_pt[1])), 3, (0,0,127), -1)
         line1_pts_x, line1_pts_y = line1_pts[:,0], line1_pts[:,1]
-        #degree = 2
         p_r = Polynomial.fit(line1_pts_y, line1_pts_x, degree)
         y_r = np.linspace(h//2, h, 50)
         x_r = p_r(y_r)
         for i, _ in enumerate(x_r):
-            cv2.circle(image, (int(x_r[i]), int(y_r[i])), 5, (255, 0, 0), -1)
+            cv2.circle(drawed_img, (int(x_r[i]), int(y_r[i])), 5, (0, 0, 255), -1)
         point_r1 = [p_r(h * SAMPLING_RATE), h * SAMPLING_RATE]
         point_r2 = [p_r(h * SAMPLING_RATE + 0.01), h * SAMPLING_RATE + 0.01]
         line1_ang = math.degrees(math.atan((point_r2[0] - point_r1[0]) / (point_r1[1] - point_r2[1])))
         
     if len(line2_pts) >= 2:
         line2_pts = np.array(line2_pts, dtype=np.float32)
-        line2_pts = tools.convert_bev_points(image, line2_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)
+        line2_pts = tools.convert_bev_points((h, w), line2_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)
         line2_pts = line2_pts.reshape(-1,2)
+        for line2_pt in line2_pts:
+            cv2.circle(drawed_img, (int(line2_pt[0]), int(line2_pt[1])), 3, (0,127,0), -1)
         line2_pts_x, line2_pts_y = line2_pts[:,0], line2_pts[:,1]
-        #degree = 2
         p_l = Polynomial.fit(line2_pts_y, line2_pts_x, degree)
         y_l = np.linspace(h//2, h, 50)
         x_l = p_l(y_l)
         for i, _ in enumerate(x_l):
-            cv2.circle(image, (int(x_l[i]), int(y_l[i])), 5, (0,255,0), -1)
+            cv2.circle(drawed_img, (int(x_l[i]), int(y_l[i])), 5, (0,255,0), -1)
         point_l1 = [p_l(h * SAMPLING_RATE), h * SAMPLING_RATE]
         point_l2 = [p_l(h * SAMPLING_RATE + 0.01), h * SAMPLING_RATE + 0.01]
         line2_ang = math.degrees(math.atan((point_l2[0] - point_l1[0]) / (point_l1[1] - point_l2[1])))
     #image = cv2.resize(image, (orig_w, orig_h))
-    return image, line1_ang, line2_ang
+    
+    t3 = time.time_ns()
+    print(f"t3 - t2 : {(t3 - t2) / 1000000}ms")
+    return image, drawed_img, line1_ang, line2_ang
 
 def inf_angle(model, image, running_average):
     p1, p2 = None, None
@@ -148,11 +163,9 @@ def inf_angle(model, image, running_average):
 
 
 
-def calculate_mainline(image, segment_points, SAMPLING_RATE):
-    h, w, c = image.shape
+def calculate_mainline(image_size, segment_points, SAMPLING_RATE):
+    h, w = image_size
     segment_points = sorted(segment_points, key=lambda x : x[1], reverse=True)
-    x = list()
-    y = list()
     point_cnt = 1
     line_r, line_l = [], []
     for idx, point in enumerate(segment_points[:-1]):

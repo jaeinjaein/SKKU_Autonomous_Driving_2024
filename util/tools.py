@@ -66,8 +66,8 @@ def convert_bev(image, bev_width_offset, bev_height_offset):
     bird_eye_view = cv2.warpPerspective(image, matrix, (width, height))
     return bird_eye_view
 
-def convert_bev_points(image, points, bev_width_offset, bev_height_offset):
-    height, width = image.shape[:2]
+def convert_bev_points(image_size, points, bev_width_offset, bev_height_offset):
+    height, width = image_size
     # 변환 전 후의 4개의 지점을 정의합니다.
     # 변환 전 지점들 (예시 좌표입니다. 실제 도로 사진에 맞게 조정해야 합니다)
     src_points = np.float32([
