@@ -12,3 +12,4 @@ trt/
 YOLOPv2/
 *.zip
 videos/
+ros_node/my_custom_msgs/
