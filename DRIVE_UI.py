@@ -19,22 +19,112 @@ import time
 import serial
 from util.tools import map_to_n_levels, put_message, map_to_steering
 import traceback
+from my_custom_msgs.msg import LidarData, LidarDatas
+import multiprocessing
 
 ard_list = []
+
+class SubCamNode(Node):
+    def __init__(self):
+        super().__init__('sub_cam_node')
+        self.cam_image_publisher = self.create_publisher(Image, 'sub_cam_image', 10)
+        self.mtsc_subscriber = self.create_subscription(String, 'msg_mtsc', self.listener_callback_msg_mtsc, 10)
+        self.cap = None
+        self.timer = None
+        self.model = YOLO('./models/yolov8n.pt', task='segment')
+        self.bridge = CvBridge()
+        self.record = False
+        self.writer_orig = None
+        self.writer_inferenced = None
+        self.steering_values = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+        self.fps = 10.0
+        self.model(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.2)
+        
+    def start_camera(self, device_index):
+        if self.cap is not None:
+            self.cap.release()
+        self.cap = cv2.VideoCapture(device_index)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+
+        self.cap.set(cv2.CAP_PROP_FPS, int(self.fps))
+        if self.timer is not None:
+            self.timer.cancel()
+        self.timer = self.create_timer(1.0 / self.fps, self.process_camera_frame)
+        if self.record:
+            local_time = time.localtime()
+            formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}_sub.mp4', fourcc, self.fps, (640, 360))
+            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}_sub.mp4', fourcc, self.fps, (640, 360))
+    
+    def process_camera_frame(self):
+        if self.cap is None:
+            return
+        ret, frame = self.cap.read()
+        if ret:
+            t1 = time.time_ns()
+            results = self.model(frame, conf=0.2)
+            img_inferenced = results[0].plot()
+            msg_inferenced = self.bridge.cv2_to_imgmsg(img_inferenced, 'bgr8')
+            self.cam_image_publisher.publish(msg_inferenced)
+            if self.record:
+                self.writer_orig.write(frame)
+            t2 = time.time_ns()
+            print(f'inference time : {(t2 - t1) / 1e+6}ms')
+
+    def start_video(self, video_path):
+        if self.cap is not None:
+            self.cap.release()
+        self.cap = cv2.VideoCapture(video_path)
+        if self.timer is not None:
+            self.timer.cancel()
+        self.timer = self.create_timer(1.0 / self.fps, self.process_camera_frame)
+        if self.record:
+            local_time = time.localtime()
+            formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
+            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
+
+    def destroy_node(self):
+        super().destroy_node()
+        if self.cap is not None:
+            self.cap.release()
+            
+    def stop_camera(self):
+        if self.cap is not None:
+            self.cap.release()
+        if self.timer is not None:
+            self.timer.cancel()
+        if self.record:
+            self.writer_orig.release()
+            self.writer_inferenced.release()
+            
+    def load_params(self):
+        with open('params_sub.txt', 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                line = line.rstrip()
+                name, val = line.split('=')
+                exec(f'self.{line}')
+        print('sub cam param updated.')
+    
+    def listener_callback_msg_mtsc(self, msg):
+        exec(msg.data)
+        
 
 class CamNode(Node):
     def __init__(self):
         super().__init__('cam_node')
-     
-        self.publisher = self.create_publisher(Image, 'cam_img', 10)
-        self.pta_publisher = self.create_publisher(String, 'serial_pta', 10)
-        self.bridge = CvBridge()
+        self.mta_publisher = self.create_publisher(String, 'msg_mta', 10)
+        self.mtc_subscriber = self.create_subscription(String, 'msg_mtc', self.listener_callback_msg_mtc, 10)
+        self.cam_image_publisher = self.create_publisher(Image, 'cam_image', 10)
+        self.cam_image_infer_publisher = self.create_publisher(Image, 'cam_image_infer', 10)
         self.cap = None
         self.timer = None
-        self.cv_image = None
+        self.bridge = CvBridge()
         self.model = YOLO('./last.engine', task='segment')
-        self.running_average = RunningAverage()
-        self.create_blank_image()
         self.record = False
         self.writer_orig = None
         self.writer_inferenced = None
@@ -48,6 +138,13 @@ class CamNode(Node):
         self.steering_values = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
         self.poly_degree = 2
         self.fps = 10.0
+        self.verbose = True
+        self.load_params()
+        self.model(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.2)
+        #self.start_camera(0)
+
+    def listener_callback_msg_mtc(self, msg):
+        exec(msg.data)
 
     def start_camera(self, device_index):
         if self.cap is not None:
@@ -67,23 +164,6 @@ class CamNode(Node):
             self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
             self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
 
-    def create_blank_image(self):
-        self.cv_image = np.zeros((720, 1280, 3), dtype=np.uint8)
-    
-    def update_image_cam(self, img, pos):
-        # Resize the incoming image to fit into the top-left quadrant (640x360)
-        h, w = img.shape[:2]
-        if h != 360 or w != 640:
-            resized_img = cv2.resize(img, (640, 360))
-        if pos == 0:
-            self.cv_image[0:360, :640] = resized_img
-        elif pos == 1:
-            self.cv_image[0:360, 640:] = resized_img
-        elif pos == 2:
-            self.cv_image[360:, :640] = resized_img
-        elif pos == 3:
-            self.cv_image[360:, 640:] = resized_img
-
     def publish_camera_frame(self):
         if self.cap is None:
             return
@@ -92,7 +172,7 @@ class CamNode(Node):
             try:
                 t1 = time.time_ns()
                 img_inferenced, drawed_img, line1_ang, line2_ang = inf_angle_mainline(self.model, frame, self.SAMPLING_RATE, self.bev_width_offset, self.bev_height_offset, self.poly_degree)
-                self.update_image_cam(img_inferenced, 0)
+                
                 steering_value = -9999.0
                 if line1_ang != None:
                     idx, steering_value = map_to_steering(line1_ang, self.angle_min, self.angle_max, self.steering_values)
@@ -104,12 +184,19 @@ class CamNode(Node):
                     if self.save_statistics:
                         self.statistics_list.append([idx, steering_value])
                     self.publish_angle(steering_value)
-                drawed_img = put_message(drawed_img, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
+                if self.verbose:
+                    drawed_img = put_message(drawed_img, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
                 
                 if self.record:
                     self.writer_orig.write(frame)
                     self.writer_inferenced.write(drawed_img)
-                self.update_image_cam(drawed_img, 1)
+                t3 = time.time_ns()
+                msg_inferenced = self.bridge.cv2_to_imgmsg(img_inferenced, 'bgr8')
+                self.cam_image_publisher.publish(msg_inferenced)
+                msg_drawed = self.bridge.cv2_to_imgmsg(drawed_img, 'bgr8')
+                self.cam_image_infer_publisher.publish(msg_drawed)
+                t4 = time.time_ns()
+                print(f"topic-publish delay : {(t4 - t3) / 1e+6}ms")
                 t2 = time.time_ns()
                 print(f"inference time : {(t2 - t1) / 1000000}ms")
             except Exception as e:
@@ -120,7 +207,7 @@ class CamNode(Node):
         data = 'angle%02d;' % value
         msg = String()
         msg.data = data
-        self.pta_publisher.publish(msg)
+        self.mta_publisher.publish(msg)
 
     def start_video(self, video_path):
         if self.cap is not None:
@@ -147,7 +234,7 @@ class CamNode(Node):
         if self.cap is not None:
             self.cap.release()
             
-    def stop_cam(self):
+    def stop_camera(self):
         if self.save_statistics and len(self.statistics_list) > 0:
             local_time = time.localtime()
             formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
@@ -168,12 +255,11 @@ class CamNode(Node):
                 line = line.rstrip()
                 name, val = line.split('=')
                 exec(f'self.{line}')
-                print(f'{name} param updated with value : {val}')
+        print('cam param updated.')
 
 class LidarNode(Node):
     def __init__(self):
         super().__init__('lidar_node')
-        self.publisher = self.create_publisher(String, 'lidar_data', 10)
         self.timer = None
 
     def start_lidar(self, port):
@@ -183,21 +269,17 @@ class LidarNode(Node):
         self.timer = self.create_timer(1.0 / 1.0, self.publish_lidar_data)
 
     def publish_lidar_data(self):
-        # Dummy data for demonstration purposes
-        data = "Lidar data from port " + self.port
-        msg = String()
-        msg.data = data
-        self.publisher.publish(msg)
+        pass
 
 class ArdNode(Node):
     def __init__(self):
         super().__init__('ard_node')
-        self.subscription_cam = self.create_subscription(
+        self.subscriber_mta = self.create_subscription(
             String,
-            'serial_pta',
-            self.listener_pta,
+            'msg_mta',
+            self.listener_mta,
             10)
-        self.publisher = self.create_publisher(String, 'serial_atp', 10)
+        self.publisher = self.create_publisher(String, 'msg_atm', 10)
         self.timer = None
         self.port = ''
         self.serial_session = None
@@ -210,63 +292,99 @@ class ArdNode(Node):
         self.timer = self.create_timer(1.0 / 1.0, self.publish_arduino_data)
 
     def publish_arduino_data(self):
-        # Dummy data for demonstration purposes
-        data = "Arduino data from port " + self.port
-        msg = String()
-        msg.data = data
-        self.publisher.publish(msg)
+        pass
+        
+    def stop_arduino(self):
+        self.serial_session.close()
+        self.port = ''
+        self.serial_session = None
+        self.timer.cancel()
+        self.timer = None
     
-    def listener_pta(self, data):
-        if self.port != '':
-            self.serial_session.write(data.data.encode())
+    def listener_mta(self, data):
+        if data.data.startswith('exec'):
+            exec(data.data[5:])
+        else:
+            if self.port != '':
+                self.serial_session.write(data.data.encode())
 
 class MainNode(Node):
     def __init__(self):
         super().__init__('main_node')
-        self.subscription_lidar = self.create_subscription(
-            String,
-            'lidar_data',
-            self.listener_callback_lidar,
-            10)
-        self.subscription_serial = self.create_subscription(
-            String,
-            'serial_atp',
-            self.listener_callback_serial,
-            10)
-        self.pta_publisher = self.create_publisher(String, 'serial_pta', 10)
+        
+        # topics between camera and main
+        self.sub_cam_image = self.create_subscription(Image, 'cam_image', self.listener_callback_cam_image, 10)
+        self.sub_cam_image_infer = self.create_subscription(Image, 'cam_image_infer', self.listener_callback_cam_image_infer, 10)
+        self.sub_msg_ctm = self.create_subscription(String, 'msg_ctm', self.listener_callback_msg_ctm, 10)
+        self.mtc_publisher = self.create_publisher(String, 'msg_mtc', 10)
+        
+        # topics between sub camera and main
+        self.sub_scam_image = self.create_subscription(Image, 'sub_cam_image', self.listener_callback_sub_cam_image, 10)
+        self.sub_msg_sctm = self.create_subscription(String, 'msg_sctm', self.listener_callback_msg_sctm, 10)
+        self.mtsc_publisher = self.create_publisher(String, 'msg_mtsc', 10)
+        
+        # topics between lidar and main
+        self.sub_lidar_image = self.create_subscription(Image, 'lidar_image', self.listener_callback_lidar_image, 10)
+        self.sub_msg_ltm = self.create_subscription(String, 'msg_ltm', self.listener_callback_msg_ltm, 10)
+        self.mtl_publisher = self.create_publisher(String, 'msg_mtl', 10)
+        
+        # topics between ard and main
+        self.sub_msg_atm = self.create_subscription(String, 'msg_atm', self.listener_callback_msg_atm, 10)
+        self.mta_publisher = self.create_publisher(String, 'msg_mta', 10)
+
         self.bridge = CvBridge()
-        self.cv_image = None
-        self.create_blank_image()
-        self.model = YOLO('./last.engine', task='segment')
-
-    def create_blank_image(self):
         self.cv_image = np.zeros((720, 1280, 3), dtype=np.uint8)
-
-    def listener_callback_lidar(self, data):
-        # TODO: Add code to update lower-left quadrant of self.cv_image with lidar data
+        
+    def listener_callback_cam_image(self, msg):
+        image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+        h, w = image.shape[:2]
+        if h != 360 or w != 640:
+            image = cv2.resize(image, (640, 360))
+        self.cv_image[:360, :640] = image  # left high image
+    
+    def listener_callback_cam_image_infer(self, msg):
+        image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+        h, w = image.shape[:2]
+        if h != 360 or w != 640:
+            image = cv2.resize(image, (640, 360))
+        self.cv_image[:360, 640:] = image  # right high image
+    
+    def listener_callback_sub_cam_image(self, msg):
+        image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+        h, w = image.shape[:2]
+        if h != 360 or w != 640:
+            image = cv2.resize(image, (640, 360))
+        self.cv_image[360:, :640] = image  # left below image
+        
+    def listener_callback_lidar_image(self, msg):
+        image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+        h, w = image.shape[:2]
+        if h != 360 or w != 640:
+            image = cv2.resize(image, (640, 360))
+        self.cv_image[360:, 640:] = image  # right below image
+        
+    def listener_callback_msg_ctm(self, msg):
+        # for msg camera to main [msg : String --> String.data]
+        pass
+        
+    def listener_callback_msg_sctm(self, msg):
+        # for msg sub camera to main [msg : String --> String.data]
+        pass
+        
+    def listener_callback_msg_ltm(self, msg):
+        # for msg lidar to main [msg : String --> String.data]
+        pass
+        
+    def listener_callback_msg_atm(self, msg):
+        # for msg arduino to main [msg : String --> String.data]
         pass
 
-    def listener_callback_serial(self, data):
-        # TODO: Add code to handle serial data if needed
-        pass
-
-    def update_image_cam(self, img, pos):
-        # Resize the incoming image to fit into the top-left quadrant (640x360)
-        resized_img = cv2.resize(img, (640, 360))
-        if pos == 0:
-            self.cv_image[0:360, 0:640] = resized_img
-        elif pos == 1:
-            self.cv_image[0:360, 640:] = resized_img
-        elif pos == 2:
-            self.cv_image[360:, :640] = resized_img
-        elif pos == 3:
-            self.cv_image[360:, 640:] = resized_img
-
+    # message functions for main node to arduino node
     def publish_setting(self):
         data = 'setting;'
         msg = String()
         msg.data = data
-        self.pta_publisher.publish(msg)
+        self.mta_publisher.publish(msg)
         
     def publish_speed(self, value):
         data = 'speed'
@@ -277,25 +395,46 @@ class MainNode(Node):
         data += '%03d;' % self.abs_value(value)
         msg = String()
         msg.data = data
-        self.pta_publisher.publish(msg)
+        self.mta_publisher.publish(msg)
         
     def publish_angle(self, value):
         data = 'angle%02d;' % value
         msg = String()
         msg.data = data
-        self.pta_publisher.publish(msg)
+        self.mta_publisher.publish(msg)
     
     def abs_value(self, value):
         if value >= 0:
             return value
         else:
             return -1 * value
+            
+    def publish_mta_rawdata(self, data):
+        msg = String()
+        msg.data = data
+        self.mta_publisher.publish(msg)
+            
+    # message functions for main node to cam node
+    def publish_mtc_rawdata(self, data):
+        msg = String()
+        msg.data = data
+        self.mtc_publisher.publish(msg)
+        
+    def publish_mtl_rawdata(self, data):
+        msg = String()
+        msg.data = data
+        self.mtl_publisher.publish(msg)
+        
+    def publish_mtsc_rawdata(self, data):
+        msg = String()
+        msg.data = data
+        self.mtsc_publisher.publish(msg)
         
 class MyApp(QWidget):
-    def __init__(self, ros_nodes):
+    def __init__(self, main_node):
         super().__init__()
-        self.main_node, self.lidar_node, self.ard_node, self.cam_node = ros_nodes
-        self.cam_conn, self.lidar_conn, self.ard_conn = False, False, False
+        self.main_node = main_node
+        self.cam_conn, self.sub_cam_conn, self.lidar_conn, self.ard_conn = False, False, False, False
         self.initUI()
 
     def initUI(self):
@@ -333,6 +472,10 @@ class MyApp(QWidget):
         self.camComboBox = QComboBox()
         self.camSelectButton = QPushButton('Connect')
         self.createDeviceSelectionLayout(rightTopLayout, 'CAM Device', self.populateCamComboBox, self.camComboBox, self.camSelectButton, self.selectCamDevice)
+        
+        self.subcamComboBox = QComboBox()
+        self.subcamSelectButton = QPushButton('Connect')
+        self.createDeviceSelectionLayout(rightTopLayout, 'SCAM Device', self.populateCamComboBox, self.subcamComboBox, self.subcamSelectButton, self.selectSubCamDevice)
 
         self.lidarComboBox = QComboBox()
         self.lidarSelectButton = QPushButton('Connect')
@@ -441,20 +584,37 @@ class MyApp(QWidget):
                 self.checkbox3.setChecked(False)
     
     def recordChanged(self):
-        self.cam_node.record = self.checkboxRecord.isChecked()
+        self.main_node.publish_mtc_rawdata(f"self.record = {self.checkboxRecord.isChecked()}")
 
     def selectCamDevice(self, comboBox, selectButton):
         if not self.cam_conn:
             index = int(comboBox.currentText())
             comboBox.setEnabled(False)
-            self.cam_node.start_camera(index)
+            self.main_node.publish_mtc_rawdata(f"self.start_camera({index})")
             selectButton.setText("Disconnect")
             self.cam_conn = True
+            self.checkboxRecord.setEnabled(False)
         else:
             comboBox.setEnabled(True)
-            self.cam_node.stop_cam()
+            self.main_node.publish_mtc_rawdata(f"self.stop_camera()")
             selectButton.setText("Connect")
             self.cam_conn = False
+            self.checkboxRecord.setEnabled(True)
+            
+    def selectSubCamDevice(self, comboBox, selectButton):
+        if not self.sub_cam_conn:
+            index = int(comboBox.currentText())
+            comboBox.setEnabled(False)
+            self.main_node.publish_mtsc_rawdata(f"self.start_camera({index})")
+            selectButton.setText("Disconnect")
+            self.sub_cam_conn = True
+            self.checkboxRecord.setEnabled(False)
+        else:
+            comboBox.setEnabled(True)
+            self.main_node.publish_mtsc_rawdata(f"self.stop_camera()")
+            selectButton.setText("Connect")
+            self.sub_cam_conn = False
+            self.checkboxRecord.setEnabled(False)
 
     def selectLidarDevice(self, comboBox, selectButton):
         port = comboBox.currentText()
@@ -463,22 +623,28 @@ class MyApp(QWidget):
         self.lidar_node.start_lidar(port)
 
     def selectArdDevice(self, comboBox, selectButton):
-        port = comboBox.currentText()
-        selectButton.setEnabled(False)
-        comboBox.setEnabled(False)
-        self.ard_node.start_arduino(port)
+        if not self.ard_conn:
+            port = comboBox.currentText()
+            comboBox.setEnabled(False)
+            selectButton.setText("Disconnect")
+            self.main_node.publish_mta_rawdata(f"exec self.start_arduino('{port}')")
+            self.ard_conn = True
+        else:
+            comboBox.setEnabled(True)
+            self.main_node.publish_mta_rawdata(f"exec self.stop_arduino()")
+            selectButton.setText("Connect")
+            self.ard_conn = False
 
     def TestStartButtonClicked(self):
         if self.checkboxTest.isChecked():
-            if self.cam_node.cap is not None:
-                self.cam_node.stop_cam()
+            if self.cam_conn:
+                return
             video_path = './videos/orig/2024-07-03-060729.mp4'
-            self.cam_node.start_video(video_path)
+            self.main_node.publish_mtc_rawdata(f"self.start_video('{video_path}')")
             
-
     def updateImage(self):
-        if self.cam_node.cv_image is not None:
-            self.showImage(self.cam_node.cv_image)
+        if self.main_node.cv_image is not None:
+            self.showImage(self.main_node.cv_image)
 
     def showImage(self, img):
         qformat = QImage.Format_Indexed8
@@ -526,39 +692,72 @@ class MyApp(QWidget):
         self.populateSerialComboBox(self.lidarComboBox)
     
     def updateCamParamButtonClicked(self):
-        self.cam_node.load_params()
-        
-        
+        self.main_node.publish_mtc_rawdata("self.load_params()")
+        self.main_node.publish_mtsc_rawdata("self.load_params()")
+    
+    
+def cam_node_process():
+    rclpy.init(args=None)
+    cam_node = CamNode()
+    rclpy.spin(cam_node)
+    cam_node.destroy_node()
+    rclpy.shutdown()
+    
+def ard_node_process():
+    rclpy.init(args=None)
+    ard_node = ArdNode()
+    rclpy.spin(ard_node)
+    ard_node.destroy_node()
+    rclpy.shutdown()
+    
+def lidar_node_process():
+    rclpy.init(args=None)
+    lidar_node = LidarNode()
+    rclpy.spin(lidar_node)
+    lidar_node.destroy_node()
+    rclpy.shutdown()
+    
+def sub_cam_node_process():
+    rclpy.init(args=None)
+    sub_cam_node = SubCamNode()
+    rclpy.spin(sub_cam_node)
+    sub_cam_node.destroy_node()
+    rclpy.shutdown()
+
 
 def main(args=None):
+    ctx = multiprocessing.get_context('spawn')
+    process_cam = multiprocessing.Process(target=cam_node_process, daemon=True)
+    process_sub_cam = multiprocessing.Process(target=sub_cam_node_process, daemon=True)
+    process_lidar = multiprocessing.Process(target=lidar_node_process, daemon=True)
+    process_ard = multiprocessing.Process(target=ard_node_process, daemon=True)
+    process_cam.start()
+    process_sub_cam.start()
+    process_lidar.start()
+    process_ard.start()
+    
     rclpy.init(args=args)
     main_node = MainNode()
-    cam_node = CamNode()
-    lidar_node = LidarNode()
-    ard_node = ArdNode()
 
-    nodes = [main_node, lidar_node, ard_node]
-    
-    executor1 = MultiThreadedExecutor()
-    for node in nodes:
-        executor1.add_node(node)
-        
-    executor2 = SingleThreadedExecutor()
-    executor2.add_node(cam_node)
+    executor = SingleThreadedExecutor()
+    executor.add_node(main_node)
     
 
     app = QApplication(sys.argv)
-    nodes.append(cam_node)
-    cam_node.load_params()
-    ex = MyApp(nodes)
+    ex = MyApp(main_node)
     
     # Spin ROS node in a separate thread to avoid blocking the main thread
-    thread = threading.Thread(target=executor1.spin, daemon=True)
-    thread_cam = threading.Thread(target=executor2.spin, daemon=True)
-    thread.start()
-    thread_cam.start()
+    thread_main = threading.Thread(target=executor.spin, daemon=True)
+    thread_main.start()
+    
     
     sys.exit(app.exec_())
+    
+    thread_main.join()
+    process_cam.join()
+    process_sub_cam.join()
+    process_lidar.join()
+    process_ard.join()
 
 if __name__ == '__main__':
     main()
