@@ -21,6 +21,8 @@ from util.tools import map_to_n_levels, put_message, map_to_steering
 import traceback
 from my_custom_msgs.msg import LidarData, LidarDatas
 import multiprocessing
+from rplidar import RPLidar, RPLidarException
+import math
 
 ard_list = []
 
@@ -260,16 +262,69 @@ class CamNode(Node):
 class LidarNode(Node):
     def __init__(self):
         super().__init__('lidar_node')
+        self.mtl_subscriber = self.create_subscription(String, 'msg_mtl', self.listener_callback_msg_mtl, 10)
+        self.lidar_image_publisher = self.create_publisher(Image, 'lidar_image', 10)
         self.timer = None
+        self.window_width = 360
+        self.window_height = 360
+        self.max_distance = 6000
+        self.scale = self.window_width / (2 * self.max_distance)
+        self.lidar_session = None
+        self.bridge = CvBridge()
+        self.lidar_thread = threading.Thread(target=self.lidar_main, daemon=True)
+        self.lidar_thread.start()
 
     def start_lidar(self, port):
-        self.port = port
-        if self.timer is not None:
-            self.timer.cancel()
-        self.timer = self.create_timer(1.0 / 1.0, self.publish_lidar_data)
-
-    def publish_lidar_data(self):
-        pass
+        lidar_session_cp = RPLidar(port)
+        info = lidar_session_cp.get_info()
+        print(info)
+        health = lidar_session_cp.get_health()
+        print(health)
+        lidar_session_cp.start_motor()
+        time.sleep(2)
+        self.lidar_session = lidar_session_cp
+        
+    def lidar_main(self):
+        while True:
+            if self.lidar_session is None:
+                continue
+            try:
+                for scan in self.lidar_session.iter_scans():
+                    image = np.zeros((self.window_height, self.window_width, 3), dtype=np.uint8)
+                    self.draw_lidar_scan(image, scan)
+                    # publish the image
+                    msg_img = self.bridge.cv2_to_imgmsg(image, 'bgr8')
+                    self.lidar_image_publisher.publish(msg_img)
+                    # and process the datas if you need
+            except:
+                pass
+            time.sleep(0.01)
+                
+    def stop_lidar(self):
+        self.lidar_session.stop()
+        self.lidar_session.stop_motor()
+        self.lidar_session.disconnect()
+        self.lidar_session = None
+        
+    def polar_to_cartesian(self, angle, distance):
+        """폴라 좌표를 카르테시안 좌표로 변환"""
+        rads = math.radians(angle)
+        x = distance * math.cos(rads)
+        y = distance * math.sin(rads)
+        return x, y
+        
+    def draw_lidar_scan(self, image, scan):
+        """라이다 스캔 데이터를 화면에 그리기"""
+        for (_, angle, distance) in scan:
+            if distance > self.max_distance:
+                continue
+            x, y = self.polar_to_cartesian(angle, distance)
+            x = int(self.window_width / 2 + x * self.scale)
+            y = int(self.window_height / 2 - y * self.scale)
+            cv2.circle(image, (x, y), 2, (0, 255, 0), -1)
+            
+    def listener_callback_msg_mtl(self, msg):
+        exec(msg.data)
 
 class ArdNode(Node):
     def __init__(self):
@@ -358,10 +413,7 @@ class MainNode(Node):
         
     def listener_callback_lidar_image(self, msg):
         image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
-        h, w = image.shape[:2]
-        if h != 360 or w != 640:
-            image = cv2.resize(image, (640, 360))
-        self.cv_image[360:, 640:] = image  # right below image
+        self.cv_image[360:, 640:1000] = image  # right below image
         
     def listener_callback_msg_ctm(self, msg):
         # for msg camera to main [msg : String --> String.data]
@@ -617,10 +669,17 @@ class MyApp(QWidget):
             self.checkboxRecord.setEnabled(False)
 
     def selectLidarDevice(self, comboBox, selectButton):
-        port = comboBox.currentText()
-        selectButton.setEnabled(False)
-        comboBox.setEnabled(False)
-        self.lidar_node.start_lidar(port)
+        if not self.lidar_conn:
+            port = comboBox.currentText()
+            comboBox.setEnabled(False)
+            selectButton.setText("Disconnect")
+            self.main_node.publish_mtl_rawdata(f"self.start_lidar('{port}')")
+            self.lidar_conn = True
+        else:
+            comboBox.setEnabled(True)
+            self.main_node.publish_mtl_rawdata(f"self.stop_lidar()")
+            selectButton.setText("Connect")
+            self.lidar_conn = False
 
     def selectArdDevice(self, comboBox, selectButton):
         if not self.ard_conn:

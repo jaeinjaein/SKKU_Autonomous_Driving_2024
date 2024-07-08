@@ -45,8 +45,8 @@ def convert_bev(image, bev_width_offset, bev_height_offset):
     # 변환 전 후의 4개의 지점을 정의합니다.
     # 변환 전 지점들 (예시 좌표입니다. 실제 도로 사진에 맞게 조정해야 합니다)
     src_points = np.float32([
-        [int(width * bev_width_offset), height * (0.5 - bev_height_offset)], 
-        [int(width * (1.0 - bev_width_offset)), height * (0.5 - bev_height_offset)], 
+        [int(width * bev_width_offset), height * (0.7 - bev_height_offset)], 
+        [int(width * (1.0 - bev_width_offset)), height * (0.7 - bev_height_offset)], 
         [width * 0, height * (1.0 - bev_height_offset)], 
         [width * 1, height * (1.0 - bev_height_offset)]
     ])
@@ -71,8 +71,8 @@ def convert_bev_points(image_size, points, bev_width_offset, bev_height_offset):
     # 변환 전 후의 4개의 지점을 정의합니다.
     # 변환 전 지점들 (예시 좌표입니다. 실제 도로 사진에 맞게 조정해야 합니다)
     src_points = np.float32([
-        [int(width * bev_width_offset), height * (0.5 - bev_height_offset)], 
-        [int(width * (1.0 - bev_width_offset)), height * (0.5 - bev_height_offset)], 
+        [int(width * bev_width_offset), height * (0.7 - bev_height_offset)], 
+        [int(width * (1.0 - bev_width_offset)), height * (0.7 - bev_height_offset)], 
         [width * 0, height * (1.0 - bev_height_offset)], 
         [width * 1, height * (1.0 - bev_height_offset)]
     ])

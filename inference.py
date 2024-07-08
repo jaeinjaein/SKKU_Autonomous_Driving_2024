@@ -45,9 +45,9 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
     line1_ang, line2_ang = None, None
     t0 = time.time_ns()
     results = model(image, conf=0.2, half=True)
-    #image = results[0].plot()
+    drawed_img = results[0].plot()
     h, w, c = image.shape
-    drawed_img = np.zeros((h, w, 3), dtype=np.uint8)
+    drawed_img = tools.convert_bev(image, bev_width_offset, bev_height_offset)
     line1_pts, line2_pts = [], []
     t1 = time.time_ns()
     for idx, box in enumerate(results[0].boxes):
@@ -60,7 +60,6 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
             line1_pts, line2_pts = calculate_mainline((h, w), seg_points, SAMPLING_RATE)
     t2 = time.time_ns()
     print(f"t2 - t1 : {(t2 - t1) / 1000000}ms")
-    #image = tools.convert_bev(image, bev_width_offset, bev_height_offset)
     if len(line1_pts) >= 2:
         line1_pts = np.array(line1_pts, dtype=np.float32)
         line1_pts = tools.convert_bev_points((h, w), line1_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)
