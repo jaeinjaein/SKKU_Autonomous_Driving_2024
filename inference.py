@@ -121,7 +121,7 @@ def calculate_mainline(image_size, segment_points, SAMPLING_RATE):
             cnt += 1
             if cnt == 5:
                 break
-        if y_o <= h * (SAMPLING_RATE - 0.3):
+        if y_o <= h * (SAMPLING_RATE - 0.2):
             break
     if len(line_r) < 2 and len(line_l) < 2:
         line_r = find_sideline(segment_points, w * 0.5, h * (SAMPLING_RATE - 0.3), w, h * SAMPLING_RATE)

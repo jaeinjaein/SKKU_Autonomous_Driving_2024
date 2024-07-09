@@ -33,13 +33,13 @@ class SubCamNode(Node):
         self.mtsc_subscriber = self.create_subscription(String, 'msg_mtsc', self.listener_callback_msg_mtsc, 10)
         self.cap = None
         self.timer = None
-        self.model = YOLO('./models/yolov8n.pt', task='segment')
+        self.model = YOLO('./models/yolov8x.pt', task='segment')
         self.bridge = CvBridge()
         self.record = False
         self.writer_orig = None
         self.writer_inferenced = None
         self.steering_values = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
-        self.fps = 10.0
+        self.fps = 5.0
         self.model(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.2)
         
     def start_camera(self, device_index):
@@ -66,7 +66,7 @@ class SubCamNode(Node):
         ret, frame = self.cap.read()
         if ret:
             t1 = time.time_ns()
-            results = self.model(frame, conf=0.2)
+            results = self.model(frame, conf=0.6)
             img_inferenced = results[0].plot()
             msg_inferenced = self.bridge.cv2_to_imgmsg(img_inferenced, 'bgr8')
             self.cam_image_publisher.publish(msg_inferenced)
