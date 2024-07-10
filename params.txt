@@ -1,9 +1,9 @@
 SAMPLING_RATE=0.9
 bev_height_offset=0.1
 bev_width_offset=0.18
-angle_min=-34
-angle_max=34
-steering_values=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,13,14,14,14,15,15,16]
+angle_min=-31
+angle_max=31
+steering_values=[1,2,3,4,4,6,7,8,9,9,10,11,12,12,13,13,14,14,15,15,16]
 poly_degree=1
 fps=8.0
 verbose=True

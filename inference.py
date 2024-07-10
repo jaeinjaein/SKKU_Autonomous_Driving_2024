@@ -48,6 +48,7 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
     drawed_img = results[0].plot()
     h, w, c = image.shape
     drawed_img = tools.convert_bev(image, bev_width_offset, bev_height_offset)
+    point_r, point_l = None, None
     line1_pts, line2_pts = [], []
     t1 = time.time_ns()
     for idx, box in enumerate(results[0].boxes):
@@ -75,7 +76,7 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
         point_r1 = [p_r(h * SAMPLING_RATE), h * SAMPLING_RATE]
         point_r2 = [p_r(h * SAMPLING_RATE + 0.01), h * SAMPLING_RATE + 0.01]
         line1_ang = math.degrees(math.atan((point_r2[0] - point_r1[0]) / (point_r1[1] - point_r2[1])))
-        
+        point_r = p_r(360)
     if len(line2_pts) >= 2:
         line2_pts = np.array(line2_pts, dtype=np.float32)
         line2_pts = tools.convert_bev_points((h, w), line2_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)
@@ -91,11 +92,18 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
         point_l1 = [p_l(h * SAMPLING_RATE), h * SAMPLING_RATE]
         point_l2 = [p_l(h * SAMPLING_RATE + 0.01), h * SAMPLING_RATE + 0.01]
         line2_ang = math.degrees(math.atan((point_l2[0] - point_l1[0]) / (point_l1[1] - point_l2[1])))
+        point_l = p_l(360)
+    if point_r != None and point_l != None and abs(line1_ang) < 5 and abs(line2_ang) < 5:
+        mid_point_x = (point_r + point_l) // 2
+        mid_bias = (mid_point_x - 320) // 30
+        return image, drawed_img, line1_ang, line2_ang, mid_bias
+    else:
+        return image, drawed_img, line1_ang, line2_ang, None
     #image = cv2.resize(image, (orig_w, orig_h))
     
     t3 = time.time_ns()
     print(f"t3 - t2 : {(t3 - t2) / 1000000}ms")
-    return image, drawed_img, line1_ang, line2_ang
+    return image, drawed_img, line1_ang, line2_ang, None
 
 def calculate_mainline(image_size, segment_points, SAMPLING_RATE):
     h, w = image_size

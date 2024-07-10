@@ -31,6 +31,7 @@ class SubCamNode(Node):
         super().__init__('sub_cam_node')
         self.cam_image_publisher = self.create_publisher(Image, 'sub_cam_image', 10)
         self.mtsc_subscriber = self.create_subscription(String, 'msg_mtsc', self.listener_callback_msg_mtsc, 10)
+        self.mta_publisher = self.create_publisher(String, 'msg_mta', 10)
         self.cap = None
         self.timer = None
         self.model = YOLO('./models/yolov8x.pt', task='segment')
@@ -66,10 +67,20 @@ class SubCamNode(Node):
         ret, frame = self.cap.read()
         if ret:
             t1 = time.time_ns()
-            results = self.model(frame, conf=0.6)
+            results = self.model(frame, conf=0.4)
             img_inferenced = results[0].plot()
             msg_inferenced = self.bridge.cv2_to_imgmsg(img_inferenced, 'bgr8')
             self.cam_image_publisher.publish(msg_inferenced)
+            for idx, box in enumerate(results[0].boxes):
+                if int(box.cls) == 9:
+                    traffic_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
+                    print(traffic_size)
+                    if traffic_size > 28000:
+                        data = 'speed+000;'
+                        msg = String()
+                        msg.data = data
+                        self.mta_publisher.publish(msg)
+                    
             if self.record:
                 self.writer_orig.write(frame)
             t2 = time.time_ns()
@@ -173,19 +184,25 @@ class CamNode(Node):
         if ret:
             try:
                 t1 = time.time_ns()
-                img_inferenced, drawed_img, line1_ang, line2_ang = inf_angle_mainline(self.model, frame, self.SAMPLING_RATE, self.bev_width_offset, self.bev_height_offset, self.poly_degree)
+                img_inferenced, drawed_img, line1_ang, line2_ang, mid_bias = inf_angle_mainline(self.model, frame, self.SAMPLING_RATE, self.bev_width_offset, self.bev_height_offset, self.poly_degree)
                 
                 steering_value = -9999.0
                 if line1_ang != None:
                     idx, steering_value = map_to_steering(line1_ang, self.angle_min, self.angle_max, self.steering_values)
                     if self.save_statistics:
                         self.statistics_list.append([idx, steering_value])
-                    self.publish_angle(steering_value)
+                    if mid_bias != None:
+                        self.publish_angle(steering_value + int(mid_bias))
+                    else:
+                        self.publish_angle(steering_value)
                 elif line2_ang != None:
                     idx, steering_value = map_to_steering(line2_ang)
                     if self.save_statistics:
                         self.statistics_list.append([idx, steering_value])
-                    self.publish_angle(steering_value)
+                    if mid_bias != None:
+                        self.publish_angle(steering_value + int(mid_bias))
+                    else:
+                        self.publish_angle(steering_value)
                 if self.verbose:
                     drawed_img = put_message(drawed_img, 3, [f'rl_ang : {line1_ang}',f'll_ang : {line2_ang}', f'steer : {steering_value}'])
                 
@@ -201,6 +218,8 @@ class CamNode(Node):
                 print(f"topic-publish delay : {(t4 - t3) / 1e+6}ms")
                 t2 = time.time_ns()
                 print(f"inference time : {(t2 - t1) / 1000000}ms")
+                if mid_bias != None:
+                    print(f'mid_bias : {mid_bias}')
             except Exception as e:
                 print(f"An error occurred: {e}")
                 traceback.print_exc()
