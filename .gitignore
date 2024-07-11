@@ -14,3 +14,4 @@ YOLOPv2/
 videos/
 ros_node/my_custom_msgs/
 venv/
+runs/

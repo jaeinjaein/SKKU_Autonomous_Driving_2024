@@ -1,8 +1,5 @@
-import rclpy
-from rclpy.node import Node
 from rplidar import RPLidar
 import math
-from my_custom_msgs.msg import LidarData, LidarDatas
 from lidar.rplidar import RPLidar, _process_scan
 
 class RPLidarNode(Node):

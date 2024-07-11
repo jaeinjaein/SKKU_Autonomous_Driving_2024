@@ -7,6 +7,11 @@ import matplotlib.pyplot as plt
 import time
 from util import tools
 
+from sklearn.linear_model import RANSACRegressor
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import LinearRegression
+
 MAKE_LOG = False
 LOG_FOLDER = './log/meanline'
 HEIGHT_CROP = (540, 1000)
@@ -39,15 +44,34 @@ def find_sideline(xy_list, box_crop_min_x, box_crop_min_y, box_crop_max_x, box_c
             result.append(ptr)
     return result
 
+def find_poly(x_1, y_1, type, degree, sampling_point_y):
+    if type == 'ransac':
+        polynomial_features = PolynomialFeatures(degree=degree)
+        linear_regression = LinearRegression()
+        ransac_regressor = RANSACRegressor(estimator=linear_regression, max_trials=100, min_samples=5,
+                                           residual_threshold=5.0, random_state=0)
+        model = make_pipeline(polynomial_features, ransac_regressor)
+        r_y = np.array(y_1)
+        r_y = r_y.reshape(-1, 1)
+        r_x = np.array(x_1)
+        r_x = r_x.reshape(-1, 1)
+        model.fit(r_y, r_x)
+        y_samp = np.linspace(360 // 2, 360, 50).reshape(-1, 1)
+        x_samp = model.predict(y_samp)
+        sampling_point_x = int(model.predict(np.array([[sampling_point_y]]))[0])
+        return x_samp, y_samp, sampling_point_x, sampling_point_y
+
+
+
 
 def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height_offset, degree):
     global INFERENCE_COLOR
     line1_ang, line2_ang = None, None
     t0 = time.time_ns()
-    results = model(image, conf=0.2, half=True)
+    results = model(image, device='mps')
     drawed_img = results[0].plot()
     h, w, c = image.shape
-    drawed_img = tools.convert_bev(image, bev_width_offset, bev_height_offset)
+    drawed_img = tools.convert_bev(drawed_img, bev_width_offset, bev_height_offset)
     point_r, point_l = None, None
     line1_pts, line2_pts = [], []
     t1 = time.time_ns()
@@ -77,6 +101,10 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
         point_r2 = [p_r(h * SAMPLING_RATE + 0.01), h * SAMPLING_RATE + 0.01]
         line1_ang = math.degrees(math.atan((point_r2[0] - point_r1[0]) / (point_r1[1] - point_r2[1])))
         point_r = p_r(360)
+        # x_r, y_r, point_x, point_y = find_poly(line1_pts_x, line1_pts_y, 'ransac', 1, int(h * 0.9))
+        # for i, _ in enumerate(x_r):
+        #     cv2.circle(drawed_img, (int(x_r[i]), int(y_r[i])), 5, (0, 0, 255), -1)
+        # line1_ang = 10
     if len(line2_pts) >= 2:
         line2_pts = np.array(line2_pts, dtype=np.float32)
         line2_pts = tools.convert_bev_points((h, w), line2_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)

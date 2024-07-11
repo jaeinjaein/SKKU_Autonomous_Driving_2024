@@ -1,8 +1,3 @@
-import rclpy
-from rclpy.node import Node
-from sensor_msgs.msg import Image
-from my_custom_msgs.msg import LidarData
-
 from cv_bridge import CvBridge
 import cv2
 

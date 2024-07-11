@@ -1,6 +1,3 @@
-import rclpy
-from rclpy.node import Node
-from my_custom_msgs.msg import LidarData, LidarDatas
 import cv2
 import math
 import numpy as np
