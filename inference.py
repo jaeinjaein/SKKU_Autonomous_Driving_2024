@@ -44,22 +44,35 @@ def find_sideline(xy_list, box_crop_min_x, box_crop_min_y, box_crop_max_x, box_c
             result.append(ptr)
     return result
 
-def find_poly(x_1, y_1, type, degree, sampling_point_y):
+def find_poly(h, x_1, y_1, type, degree, sampling_point_y_1, sampling_point_y_2):
     if type == 'ransac':
+
         polynomial_features = PolynomialFeatures(degree=degree)
         linear_regression = LinearRegression()
         ransac_regressor = RANSACRegressor(estimator=linear_regression, max_trials=100, min_samples=5,
-                                           residual_threshold=5.0, random_state=0)
+                                           residual_threshold=5, random_state=0)
         model = make_pipeline(polynomial_features, ransac_regressor)
         r_y = np.array(y_1)
         r_y = r_y.reshape(-1, 1)
         r_x = np.array(x_1)
         r_x = r_x.reshape(-1, 1)
         model.fit(r_y, r_x)
-        y_samp = np.linspace(360 // 2, 360, 50).reshape(-1, 1)
+        y_samp = np.linspace(h // 2, h, 50).reshape(-1, 1)
         x_samp = model.predict(y_samp)
-        sampling_point_x = int(model.predict(np.array([[sampling_point_y]]))[0])
-        return x_samp, y_samp, sampling_point_x, sampling_point_y
+        sampling_point_x_1 = model.predict(np.array([[sampling_point_y_1]]))[0]
+        sampling_point_x_2 = model.predict(np.array([[sampling_point_y_2]]))[0]
+        sampling_point_m = model.predict(np.array([[h]]))[0]
+        point_1 = (sampling_point_x_1, sampling_point_y_1)
+        point_2 = (sampling_point_x_2, sampling_point_y_2)
+        return x_samp, y_samp, point_1, point_2, sampling_point_m
+    elif type == 'poly':
+        p_r = Polynomial.fit(y_1, x_1, degree)
+        y_samp = np.linspace(h // 2, h, 50)
+        x_samp = p_r(y_samp)
+        point_1 = [p_r(sampling_point_y_1), sampling_point_y_1]
+        point_2 = [p_r(sampling_point_y_2), sampling_point_y_2]
+        sampling_point_m = p_r(h)
+        return x_samp, y_samp, point_1, point_2, sampling_point_m
 
 
 
@@ -68,8 +81,9 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
     global INFERENCE_COLOR
     line1_ang, line2_ang = None, None
     t0 = time.time_ns()
-    results = model(image, device='mps')
+    results = model(image,conf=0.85, device='mps', verbose=False)
     drawed_img = results[0].plot()
+    image = drawed_img
     h, w, c = image.shape
     drawed_img = tools.convert_bev(drawed_img, bev_width_offset, bev_height_offset)
     point_r, point_l = None, None
@@ -81,56 +95,60 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
         seg_points = results[0].masks[idx].xy[0]
         #for seg_point in seg_points:
         #    cv2.circle(image, (int(seg_point[0]), int(seg_point[1])), 5, INFERENCE_COLOR[int(box.cls)], -1)
-        if box.cls == 2:
+        if box.cls == 1:
             line1_pts, line2_pts = calculate_mainline((h, w), seg_points, SAMPLING_RATE)
     t2 = time.time_ns()
-    print(f"t2 - t1 : {(t2 - t1) / 1000000}ms")
-    if len(line1_pts) >= 2:
+    #print(f"t2 - t1 : {(t2 - t1) / 1000000}ms")
+    if len(line1_pts) >= 5:
         line1_pts = np.array(line1_pts, dtype=np.float32)
         line1_pts = tools.convert_bev_points((h, w), line1_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)
         line1_pts = line1_pts.reshape(-1,2)
         for line1_pt in line1_pts:
             cv2.circle(drawed_img, (int(line1_pt[0]), int(line1_pt[1])), 3, (0,0,127), -1)
         line1_pts_x, line1_pts_y = line1_pts[:,0], line1_pts[:,1]
-        p_r = Polynomial.fit(line1_pts_y, line1_pts_x, degree)
-        y_r = np.linspace(h//2, h, 50)
-        x_r = p_r(y_r)
+
+        point_r1_y = h * (SAMPLING_RATE - 0.05)
+        point_r2_y = h * SAMPLING_RATE
+
+        x_r, y_r, point_r1, point_r2, point_r = find_poly(h, line1_pts_x, line1_pts_y, 'ransac', degree, point_r1_y,
+                                                          point_r2_y)
+
         for i, _ in enumerate(x_r):
             cv2.circle(drawed_img, (int(x_r[i]), int(y_r[i])), 5, (0, 0, 255), -1)
-        point_r1 = [p_r(h * SAMPLING_RATE), h * SAMPLING_RATE]
-        point_r2 = [p_r(h * SAMPLING_RATE + 0.01), h * SAMPLING_RATE + 0.01]
+
         line1_ang = math.degrees(math.atan((point_r2[0] - point_r1[0]) / (point_r1[1] - point_r2[1])))
-        point_r = p_r(360)
-        # x_r, y_r, point_x, point_y = find_poly(line1_pts_x, line1_pts_y, 'ransac', 1, int(h * 0.9))
-        # for i, _ in enumerate(x_r):
-        #     cv2.circle(drawed_img, (int(x_r[i]), int(y_r[i])), 5, (0, 0, 255), -1)
-        # line1_ang = 10
-    if len(line2_pts) >= 2:
+
+        print(f'line1_pts : {len(line1_pts)}')
+    if len(line2_pts) >= 5:
         line2_pts = np.array(line2_pts, dtype=np.float32)
         line2_pts = tools.convert_bev_points((h, w), line2_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)
         line2_pts = line2_pts.reshape(-1,2)
         for line2_pt in line2_pts:
             cv2.circle(drawed_img, (int(line2_pt[0]), int(line2_pt[1])), 3, (0,127,0), -1)
         line2_pts_x, line2_pts_y = line2_pts[:,0], line2_pts[:,1]
-        p_l = Polynomial.fit(line2_pts_y, line2_pts_x, degree)
-        y_l = np.linspace(h//2, h, 50)
-        x_l = p_l(y_l)
+
+        point_l1_y = h * (SAMPLING_RATE - 0.05)
+        point_l2_y = h * SAMPLING_RATE
+
+        x_l, y_l, point_l1, point_l2, point_l = find_poly(h, line2_pts_x, line2_pts_y, 'ransac', degree, point_l1_y,
+                                                          point_l2_y)
+
         for i, _ in enumerate(x_l):
-            cv2.circle(drawed_img, (int(x_l[i]), int(y_l[i])), 5, (0,255,0), -1)
-        point_l1 = [p_l(h * SAMPLING_RATE), h * SAMPLING_RATE]
-        point_l2 = [p_l(h * SAMPLING_RATE + 0.01), h * SAMPLING_RATE + 0.01]
+            cv2.circle(drawed_img, (int(x_l[i]), int(y_l[i])), 5, (0, 255, 0), -1)
+
         line2_ang = math.degrees(math.atan((point_l2[0] - point_l1[0]) / (point_l1[1] - point_l2[1])))
-        point_l = p_l(360)
-    if point_r != None and point_l != None and abs(line1_ang) < 5 and abs(line2_ang) < 5:
+
+        print(f'line2_pts : {len(line2_pts)}')
+    if point_r != None and point_l != None and abs(line1_ang) < 8 and abs(line2_ang) < 8:
         mid_point_x = (point_r + point_l) // 2
-        mid_bias = (mid_point_x - 320) // 30
+        mid_bias = (mid_point_x - 260) // 30
         return image, drawed_img, line1_ang, line2_ang, mid_bias
     else:
         return image, drawed_img, line1_ang, line2_ang, None
     #image = cv2.resize(image, (orig_w, orig_h))
     
     t3 = time.time_ns()
-    print(f"t3 - t2 : {(t3 - t2) / 1000000}ms")
+    #print(f"t3 - t2 : {(t3 - t2) / 1000000}ms")
     return image, drawed_img, line1_ang, line2_ang, None
 
 def calculate_mainline(image_size, segment_points, SAMPLING_RATE):
@@ -159,7 +177,7 @@ def calculate_mainline(image_size, segment_points, SAMPLING_RATE):
                 break
         if y_o <= h * (SAMPLING_RATE - 0.2):
             break
-    if len(line_r) < 2 and len(line_l) < 2:
+    if len(line_r) < 5 and len(line_l) < 5:
         line_r = find_sideline(segment_points, w * 0.5, h * (SAMPLING_RATE - 0.3), w, h * SAMPLING_RATE)
         line_l = find_sideline(segment_points, 0, h * (SAMPLING_RATE - 0.3), w * 0.5, h * SAMPLING_RATE)
     return line_r, line_l

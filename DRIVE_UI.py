@@ -13,6 +13,7 @@ import time
 import serial
 from util.tools import map_to_n_levels, put_message, map_to_steering
 import traceback
+from copy import deepcopy
 import multiprocessing
 from rplidar import RPLidar, RPLidarException
 import math
@@ -27,7 +28,7 @@ class lidar():
 class subcam():
     def __init__(self):
         self.cap = None
-        self.model = YOLO('./models/yolov8l.pt', task='detect')
+        self.model = YOLO('./models/yolov8x.pt', task='detect')
         self.model.to('mps')
         self.record = False
         self.writer_orig = None
@@ -35,6 +36,7 @@ class subcam():
         self.update_img = np.zeros((360, 640, 3), dtype=np.uint8)
         self.steering_values = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
         self.fps = 5.0
+        self.capture = False
         self.model(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.2)
         
     def start_camera(self, device_index):
@@ -47,9 +49,10 @@ class subcam():
         if self.record:
             local_time = time.localtime()
             formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            fourcc = cv2.VideoWriter_fourcc(*'H264')
             self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}_sub.mp4', fourcc, self.fps, (640, 360))
             self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}_sub.mp4', fourcc, self.fps, (640, 360))
+        self.capture = True
 
     def start_video(self, video_path):
         if self.cap is not None:
@@ -58,12 +61,14 @@ class subcam():
         if self.record:
             local_time = time.localtime()
             formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            fourcc = cv2.VideoWriter_fourcc(*'H264')
             self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
             self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
+        self.capture = True
             
     def stop_camera(self):
         if self.cap is not None:
+            self.capture = False
             self.cap.release()
             self.cap = None
         if self.record:
@@ -83,13 +88,14 @@ class subcam():
 class maincam():
     def __init__(self):
         self.cap = None
-        self.model = YOLO('./models/yolov8s-ep200-unf-d1.pt', task='segment')
+        self.model = YOLO('./models/yolov8s-ep200-unf-d3.pt', task='segment')
         self.model.to('mps')
+        self.model.half()
         self.record = False
         self.writer_orig = None
         self.writer_inferenced = None
         self.statistics_list = []
-        self.save_statistics = False
+        self.save_statistics = True
         self.SAMPLING_RATE = 0.8
         self.bev_height_offset = 0.2
         self.bev_width_offset = 0.27
@@ -101,6 +107,7 @@ class maincam():
         self.fps = 10.0
         self.verbose = True
         self.load_params()
+        self.capture = False
         self.model(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.2)
 
     def start_camera(self, device_index):
@@ -114,9 +121,10 @@ class maincam():
         if self.record:
             local_time = time.localtime()
             formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            fourcc = cv2.VideoWriter_fourcc(*'H264')
             self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
             self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
+        self.capture = True
 
     def start_video(self, video_path):
         if self.cap is not None:
@@ -131,9 +139,10 @@ class maincam():
         if self.record:
             local_time = time.localtime()
             formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            fourcc = cv2.VideoWriter_fourcc(*'H264')
             self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
             self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
+        self.capture = True
             
     def stop_camera(self):
         if self.save_statistics and len(self.statistics_list) > 0:
@@ -142,6 +151,7 @@ class maincam():
             save_array = np.array(self.statistics_list)
             np.save(f'./log/steering_log/{formatted_time}_steering', save_array)
         if self.cap is not None:
+            self.capture = False
             self.cap.release()
             self.cap = None
         if self.record:
@@ -233,13 +243,22 @@ class arduino():
         self.port = port
         self.serial_session = serial.Serial(port=self.port, baudrate=9600)
 
+    # def send_message(self, data):
+    #     if self.serial_session != None:
+    #         try:
+    #             if self.serial_session.isOpen():
+    #                 self.serial_session.write(data.encode())
+    #                 self.serial_session.
+
     def send_angle(self, value):
         if self.serial_session != None:
+            self.serial_session.flush()
             data = 'angle%02d;' % value
-            self.serial_session.write(data.encode())
+            print(self.serial_session.write(data.encode()))
 
     def send_speed(self, value):
         if self.serial_session != None:
+            self.serial_session.flush()
             data = 'speed'
             if value >= 0:
                 data += '+'
@@ -473,6 +492,10 @@ class MyApp(QWidget):
                 return
             video_path = './test_video.mp4'
             maincam_device.start_video(video_path)
+            if subcam_device.cap != None:
+                return
+            video_path = './test_video_sub.mp4'
+            subcam_device.start_video(video_path)
             
     def updateImage(self):
         main_image = np.zeros((720, 1280, 3), np.uint8)
@@ -531,7 +554,7 @@ class MyApp(QWidget):
         subcam_device.load_params()
 
 def subcam_task():
-    if subcam_device.cap != None:
+    if subcam_device.cap != None and subcam_device.capture:
         ret, frame = subcam_device.cap.read()
         if ret:
             t1 = time.time_ns()
@@ -544,9 +567,10 @@ def subcam_task():
                         data = 'speed+000;'
                         # data를 ard_device에 전하기
             if subcam_device.record:
+                #rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 subcam_device.writer_orig.write(frame)
             t2 = time.time_ns()
-            print(f'inference time : {(t2 - t1) / 1e+6}ms')
+            #print(f'inference time : {(t2 - t1) / 1e+6}ms')
             if subcam_device.update_img.shape[0] != 360 or subcam_device.update_img.shape[1] != 640:
                 subcam_device.update_img = cv2.resize(subcam_device.update_img, (640, 360))
 
@@ -556,7 +580,7 @@ def subcam_task():
 
 
 def maincam_task():
-    if maincam_device.cap != None:
+    if maincam_device.cap != None and maincam_device.capture:
         ret, frame = maincam_device.cap.read()
         if ret:
             try:
@@ -584,13 +608,14 @@ def maincam_task():
                 if maincam_device.verbose:
                     drawed_img = put_message(drawed_img, 3, [f'rl_ang : {line1_ang}', f'll_ang : {line2_ang}', f'steer : {steering_value}'])
                 if maincam_device.record:
+                    #rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     maincam_device.writer_orig.write(frame)
                     maincam_device.writer_inferenced.write(drawed_img)
                 if frame.shape[0] != 360 or frame.shape[1] != 640:
                     frame = cv2.resize(frame, (640, 360))
                 if drawed_img.shape[0] != 360 or drawed_img.shape[1] != 640:
                     drawed_img = cv2.resize(drawed_img, (640, 360))
-                maincam_device.update_img[:360, :640] = frame
+                maincam_device.update_img[:360, :640] = img_inferenced
                 maincam_device.update_img[:360, 640:] = drawed_img
                 t3 = time.time_ns()
                 print(f'inference time : {(t3 - t1) / 1e+6}ms')
