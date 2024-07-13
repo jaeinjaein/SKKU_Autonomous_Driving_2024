@@ -28,7 +28,7 @@ class lidar():
 class subcam():
     def __init__(self):
         self.cap = None
-        self.model = YOLO('./models/yolov8x.pt', task='detect')
+        self.model = YOLO('./models/yolov8x.pt', task='segment')
         self.model.to('mps')
         self.record = False
         self.writer_orig = None
@@ -37,6 +37,8 @@ class subcam():
         self.steering_values = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
         self.fps = 5.0
         self.capture = False
+        self.avoid_state = True
+        self.traffic_state = False
         self.model(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.2)
         
     def start_camera(self, device_index):
@@ -252,13 +254,20 @@ class arduino():
 
     def send_angle(self, value):
         if self.serial_session != None:
-            self.serial_session.flush()
+            try:
+                self.serial_session.flush()
+            except:
+                print('flush error')
             data = 'angle%02d;' % value
             print(self.serial_session.write(data.encode()))
 
     def send_speed(self, value):
         if self.serial_session != None:
-            self.serial_session.flush()
+
+            try:
+                self.serial_session.flush()
+            except:
+                print('flush error')
             data = 'speed'
             if value >= 0:
                 data += '+'
@@ -558,14 +567,65 @@ def subcam_task():
         ret, frame = subcam_device.cap.read()
         if ret:
             t1 = time.time_ns()
-            results = subcam_device.model(frame, device='mps', conf=0.4)
+            results = subcam_device.model(frame, device='mps', conf=0.6)
             subcam_device.update_img = results[0].plot()
             for idx, box in enumerate(results[0].boxes):
-                if int(box.cls) == 9:
+                if int(box.cls) == 9 and subcam_device.traffic_state:
                     traffic_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
-                    if traffic_size > 28000:
-                        data = 'speed+000;'
+                    traffic_point_y = int(box.xyxy[0][3] + box.xyxy[0][1]) // 2
+                    traffic_width = int(box.xyxy[0][2] - box.xyxy[0][0])
+                    traffic_r_x = int(box.xyxy[0][0]) + int(traffic_width // 6)
+                    traffic_y_x = int(box.xyxy[0][0]) + int(3 * traffic_width // 6)
+                    traffic_g_x = int(box.xyxy[0][0]) + int(5 * traffic_width // 6)
+                    print("[find traffic sign]")
+                    print(f"R : {[frame[traffic_point_y][traffic_r_x]]}")
+                    print(f"Y : {[frame[traffic_point_y][traffic_y_x]]}")
+                    print(f"G : {[frame[traffic_point_y][traffic_g_x]]}")
+                    if traffic_size > 12000:
+                        arduino_device.send_speed(0)
+
+
                         # data를 ard_device에 전하기
+                if int(box.cls) == 2 and subcam_device.avoid_state:
+                    car_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
+                    print(car_size)
+                    if car_size > 8000:
+                        averagex = int((box.xyxy[0][0] + box.xyxy[0][2]) / 2)
+                        # 중심점이 왼쪽이면 무시, 가운데쯤 있으면 회피기동
+                        if 250 <= averagex <= 450:
+                            maincam_device.capture = False
+                            time.sleep(0.1)
+                            arduino_device.send_angle(0)
+                            time.sleep(0.1)
+                            arduino_device.send_speed(150)
+                            time.sleep(1.3)
+                            arduino_device.send_angle(20)
+                            time.sleep(1.9)
+                            arduino_device.send_angle(10)
+                            time.sleep(0.5)
+                            arduino_device.send_angle(20)
+                            time.sleep(1.5)
+                            arduino_device.send_angle(0)
+                            time.sleep(1.3)
+                            arduino_device.send_angle(10)
+                            time.sleep(1.0)
+                            arduino_device.send_speed(150)
+                            maincam_device.capture = True
+                            subcam_device.avoid_state = False
+                            subcam_device.traffic_state = True
+                            break
+                # if car_detected:
+                #     # 먼저 자율주행 끄고
+                #     arduino_device.send_angle(6)  # 해보면서 각도 바꿔야할듯
+                #     time.sleep(1)
+                #     arduino_device.send_angle(10)  # 해보면서 각도 바꿔야할듯
+                #     time.sleep(1)
+                #     arduino_device.send_angle(14)  # 해보면서 각도 바꿔야할듯
+                #     time.sleep(1)
+                #     arduino_device.send_angle(10)  # 해보면서 각도 바꿔야할듯
+                #     time.sleep(1)
+                #
+                #     # 다시 2차선 복귀 후 알고리즘 킴
             if subcam_device.record:
                 #rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 subcam_device.writer_orig.write(frame)

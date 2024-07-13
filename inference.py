@@ -141,7 +141,7 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
         print(f'line2_pts : {len(line2_pts)}')
     if point_r != None and point_l != None and abs(line1_ang) < 8 and abs(line2_ang) < 8:
         mid_point_x = (point_r + point_l) // 2
-        mid_bias = (mid_point_x - 260) // 30
+        mid_bias = (mid_point_x - 280) // 30
         return image, drawed_img, line1_ang, line2_ang, mid_bias
     else:
         return image, drawed_img, line1_ang, line2_ang, None
