@@ -9,6 +9,7 @@ fonttools           4.53.1
 fsspec              2024.6.1
 future              1.0.0
 idna                3.7
+imageio             2.34.2
 importlib_resources 6.4.0
 iso8601             2.1.0
 Jinja2              3.1.4

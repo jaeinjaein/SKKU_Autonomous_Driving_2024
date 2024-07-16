@@ -18,18 +18,6 @@ HEIGHT_CROP = (540, 1000)
 
 INFERENCE_COLOR = [(0,0,255), (255,0,0), (0,255,0), (255,255,0), (0,255,255)]
 
-#SAMPLING_RATE = 0.8
-
-class RunningAverage:
-    def __init__(self):
-        self.total = 0
-        self.count = 0
-
-    def add_value(self, value):
-        self.total += value
-        self.count += 1
-        return self.total / self.count
-
 def convert_ats(angle):
     # convert angle (-360, 360, float) -> steering value (0, 15, int)
     steering = -1
@@ -77,15 +65,19 @@ def find_poly(h, x_1, y_1, type, degree, sampling_point_y_1, sampling_point_y_2)
 
 
 
-def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height_offset, degree):
+def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height_offset, degree, visualize=False):
     global INFERENCE_COLOR
     line1_ang, line2_ang = None, None
     t0 = time.time_ns()
-    results = model(image,conf=0.85, device='mps', verbose=False)
-    drawed_img = results[0].plot()
-    image = drawed_img
+    results = model(image,conf=0.85, device='mps', verbose=True)
     h, w, c = image.shape
-    drawed_img = tools.convert_bev(drawed_img, bev_width_offset, bev_height_offset)
+    if visualize:
+        drawed_img = results[0].plot()
+        image = drawed_img
+        drawed_img = tools.convert_bev(drawed_img, bev_width_offset, bev_height_offset)
+    else:
+        drawed_img = np.zeros((h, w, 3), dtype=np.uint8)
+
     point_r, point_l = None, None
     line1_pts, line2_pts = [], []
     t1 = time.time_ns()
@@ -151,6 +143,7 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
     #print(f"t3 - t2 : {(t3 - t2) / 1000000}ms")
     return image, drawed_img, line1_ang, line2_ang, None
 
+
 def calculate_mainline(image_size, segment_points, SAMPLING_RATE):
     h, w = image_size
     segment_points = sorted(segment_points, key=lambda x : x[1], reverse=True)
@@ -181,18 +174,7 @@ def calculate_mainline(image_size, segment_points, SAMPLING_RATE):
         line_r = find_sideline(segment_points, w * 0.5, h * (SAMPLING_RATE - 0.3), w, h * SAMPLING_RATE)
         line_l = find_sideline(segment_points, 0, h * (SAMPLING_RATE - 0.3), w * 0.5, h * SAMPLING_RATE)
     return line_r, line_l
-                
-    #x, y = np.array(y),np.array(x)
-    #degree = 2
-    #mask = (x >= HEIGHT_CROP[0]) & (x <= HEIGHT_CROP[1])
-    #x = x[mask]
-    #y = y[mask]
-    #p = Polynomial.fit(x, y, degree)
-    #y_ans_1 = p(367)
-    #y_ans_2 = p(420)
-    #result_degree = math.degrees(math.atan((y_ans_1-y_ans_2)/(420-367)))
-    #cv2.line(image, (int(y_ans_1),int(367)), (int(y_ans_2),int(420)), color=(255, 0, 255), thickness=10, lineType=None, shift=None)
-    #return result_degree
+
 
 def inference_image(model, img):
     results = model(img, conf=0.8)
