@@ -65,11 +65,11 @@ def find_poly(h, x_1, y_1, type, degree, sampling_point_y_1, sampling_point_y_2)
 
 
 
-def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height_offset, degree, visualize=False):
+def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height_offset, line_name, degree, visualize=True):
     global INFERENCE_COLOR
     line1_ang, line2_ang = None, None
     t0 = time.time_ns()
-    results = model(image,conf=0.85, device='mps', verbose=True)
+    results = model(image,conf=0.8, device='mps', verbose=False)
     h, w, c = image.shape
     if visualize:
         drawed_img = results[0].plot()
@@ -77,7 +77,11 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
         drawed_img = tools.convert_bev(drawed_img, bev_width_offset, bev_height_offset)
     else:
         drawed_img = np.zeros((h, w, 3), dtype=np.uint8)
-
+    line_cls = -1
+    if line_name == 'rrline':
+        line_cls = 1
+    else:
+        line_cls = 0
     point_r, point_l = None, None
     line1_pts, line2_pts = [], []
     t1 = time.time_ns()
@@ -87,7 +91,8 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
         seg_points = results[0].masks[idx].xy[0]
         #for seg_point in seg_points:
         #    cv2.circle(image, (int(seg_point[0]), int(seg_point[1])), 5, INFERENCE_COLOR[int(box.cls)], -1)
-        if box.cls == 1:
+        #print(line_cls)
+        if box.cls == line_cls:
             line1_pts, line2_pts = calculate_mainline((h, w), seg_points, SAMPLING_RATE)
     t2 = time.time_ns()
     #print(f"t2 - t1 : {(t2 - t1) / 1000000}ms")
@@ -110,7 +115,7 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
 
         line1_ang = math.degrees(math.atan((point_r2[0] - point_r1[0]) / (point_r1[1] - point_r2[1])))
 
-        print(f'line1_pts : {len(line1_pts)}')
+        # print(f'line1_pts : {len(line1_pts)}')
     if len(line2_pts) >= 5:
         line2_pts = np.array(line2_pts, dtype=np.float32)
         line2_pts = tools.convert_bev_points((h, w), line2_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)
@@ -130,10 +135,10 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
 
         line2_ang = math.degrees(math.atan((point_l2[0] - point_l1[0]) / (point_l1[1] - point_l2[1])))
 
-        print(f'line2_pts : {len(line2_pts)}')
+        # print(f'line2_pts : {len(line2_pts)}')
     if point_r != None and point_l != None and abs(line1_ang) < 8 and abs(line2_ang) < 8:
         mid_point_x = (point_r + point_l) // 2
-        mid_bias = (mid_point_x - 280) // 30
+        mid_bias = (mid_point_x - 300) // 30
         return image, drawed_img, line1_ang, line2_ang, mid_bias
     else:
         return image, drawed_img, line1_ang, line2_ang, None
