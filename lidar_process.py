@@ -14,9 +14,9 @@ current_result = []
 window_width = 360
 window_height = 360
 max_distance = 2500
-min_distance=50
-min_angle=0
-max_angle=180
+min_distance = 50
+min_angle = 0
+max_angle = 180
 scale = window_width / (2 * max_distance)  # 360 / (2 * 2500) = 720 / 10000 = 0.072
 
 
