@@ -1006,60 +1006,61 @@ def turn_right():
 
 
 def subcam_task():
-    if subcam_device.cap is not None and subcam_device.capture:
+    if subcam_device.cap is not None:
         ret, frame = subcam_device.cap.read()
         if ret:
             t1 = time.time_ns()
             results = subcam_device.model(frame, device='mps', conf=0.6, verbose=False)
             subcam_device.update_img = results[0].plot()
-            for idx, box in enumerate(results[0].boxes):
-                if int(box.cls) == 2 and subcam_device.cross_state:
-                    cross_walk_width = int(box.xyxy[2] - box.xyxy[0])
-                    cross_walk_height = int(box.xyxy[3] - box.xyxy[1])
-                    # box 좌표로 판단하는 기준 만들고, 그 기준 넘어가면 멈춤 -> cross_state = False, traffic_state = True
-                    if False:  # 여기에 판단문 만들어주기
-                        arduino_device.current_speed = 0
-                        subcam_device.cross_state = False
-                        subcam_device.traffic_state = True
-
-                if int(box.cls) == 1 and subcam_device.traffic_state:
-                    traffic_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
-                    traffic_point_y = int(box.xyxy[0][3] + box.xyxy[0][1]) // 2
-                    traffic_width = int(box.xyxy[0][2] - box.xyxy[0][0])
-                    traffic_r_x = int(box.xyxy[0][0]) + int(traffic_width // 6)
-                    traffic_y_x = int(box.xyxy[0][0]) + int(3 * traffic_width // 6)
-                    traffic_g_x = int(box.xyxy[0][0]) + int(5 * traffic_width // 6)
-                    print("[find traffic sign]")
-                    print(f"R : {[frame[traffic_point_y][traffic_r_x]]}")
-                    print(f"Y : {[frame[traffic_point_y][traffic_y_x]]}")
-                    print(f"G : {[frame[traffic_point_y][traffic_g_x]]}")
-                    color_green = [frame[traffic_point_y][traffic_g_x]]
-                    if traffic_size > 17000:
-                        # arduino_device.current_speed = 0
-                        green_color = int(int(color_green[0][0]) + int(color_green[0][1]) + int(color_green[0][2])) // 3
-                        print(green_color)
-                        if green_color > 230:
-                            arduino_device.current_speed = 150
-                            subcam_device.traffic_state = False
-                        else:
+            if subcam_device.capture:
+                for idx, box in enumerate(results[0].boxes):
+                    if int(box.cls) == 2 and subcam_device.cross_state:
+                        cross_walk_width = int(box.xyxy[2] - box.xyxy[0])
+                        cross_walk_height = int(box.xyxy[3] - box.xyxy[1])
+                        # box 좌표로 판단하는 기준 만들고, 그 기준 넘어가면 멈춤 -> cross_state = False, traffic_state = True
+                        if False:  # 여기에 판단문 만들어주기
                             arduino_device.current_speed = 0
+                            subcam_device.cross_state = False
+                            subcam_device.traffic_state = True
 
-                if int(box.cls) == 0 and subcam_device.avoid_state:
-                    car_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
-                    print(f'car_size : {car_size}')
-                    if car_size > 6000:  # originally, 6000
-                        averagex = int((box.xyxy[0][0] + box.xyxy[0][2]) / 2)
-                        # 중심점이 왼쪽이면 무시, 가운데쯤 있으면 회피기동
-                        if 220 <= averagex <= 480:
-                            subcam_device.avoid_state = False
-                            turn_right()
-                            time.sleep(3)
-                            arduino_device.current_speed = 150
-                            maincam_device.angle_max = int(maincam_device.angle_max * 0.95)
-                            maincam_device.angle_min = int(maincam_device.angle_min * 0.95)
-                            # subcam_device.traffic_state = True
-                            subcam_device.cross_state = True
-                            break
+                    if int(box.cls) == 1 and subcam_device.traffic_state:
+                        traffic_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
+                        traffic_point_y = int(box.xyxy[0][3] + box.xyxy[0][1]) // 2
+                        traffic_width = int(box.xyxy[0][2] - box.xyxy[0][0])
+                        traffic_r_x = int(box.xyxy[0][0]) + int(traffic_width // 6)
+                        traffic_y_x = int(box.xyxy[0][0]) + int(3 * traffic_width // 6)
+                        traffic_g_x = int(box.xyxy[0][0]) + int(5 * traffic_width // 6)
+                        print("[find traffic sign]")
+                        print(f"R : {[frame[traffic_point_y][traffic_r_x]]}")
+                        print(f"Y : {[frame[traffic_point_y][traffic_y_x]]}")
+                        print(f"G : {[frame[traffic_point_y][traffic_g_x]]}")
+                        color_green = [frame[traffic_point_y][traffic_g_x]]
+                        if traffic_size > 17000:
+                            # arduino_device.current_speed = 0
+                            green_color = int(int(color_green[0][0]) + int(color_green[0][1]) + int(color_green[0][2])) // 3
+                            print(green_color)
+                            if green_color > 230:
+                                arduino_device.current_speed = 150
+                                subcam_device.traffic_state = False
+                            else:
+                                arduino_device.current_speed = 0
+
+                    if int(box.cls) == 0 and subcam_device.avoid_state:
+                        car_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
+                        print(f'car_size : {car_size}')
+                        if car_size > 6000:  # originally, 6000
+                            averagex = int((box.xyxy[0][0] + box.xyxy[0][2]) / 2)
+                            # 중심점이 왼쪽이면 무시, 가운데쯤 있으면 회피기동
+                            if 220 <= averagex <= 480:
+                                subcam_device.avoid_state = False
+                                turn_right()
+                                time.sleep(3)
+                                arduino_device.current_speed = 150
+                                maincam_device.angle_max = int(maincam_device.angle_max * 0.95)
+                                maincam_device.angle_min = int(maincam_device.angle_min * 0.95)
+                                # subcam_device.traffic_state = True
+                                subcam_device.cross_state = True
+                                break
             # if subcam_device.record:
             #     subcam_device.writer_orig.write(frame)
             t2 = time.time_ns()

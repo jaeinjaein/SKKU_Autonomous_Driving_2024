@@ -66,7 +66,7 @@ def find_poly(h, x_1, y_1, type, degree, sampling_point_y_1, sampling_point_y_2)
 
 
 
-def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height_offset, line_name, degree, visualize=True):
+def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height_offset, line_name, degree, visualize=False):
     global INFERENCE_COLOR
     line1_ang, line2_ang = None, None
     t0 = time.time_ns()
