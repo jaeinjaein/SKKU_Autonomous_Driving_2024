@@ -24,7 +24,7 @@ subcam_device, maincam_device, lidar_device, main_ui = None, None, None, None
 class subcam():
     def __init__(self):
         self.cap = None
-        self.model = YOLO('./models/yolov8m-ep100-unf-d1.pt', task='detect')
+        self.model = YOLO('./models/yolov8m-sub-ep200-unf-d2.pt', task='detect')
         self.model.to('mps')
         self.record = False
         self.writer_orig = None
