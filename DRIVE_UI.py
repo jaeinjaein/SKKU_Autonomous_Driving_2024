@@ -103,7 +103,7 @@ class subcam():
 class maincam():
     def __init__(self):
         self.cap = None
-        self.model = YOLO('./models/yolov8x-ep200-unf-d4.pt', task='segment')
+        self.model = YOLO('./models/yolov8m-ep200-unf-d4.pt', task='segment')
         self.model.half()
         self.model.to('mps')
         self.record = False
@@ -312,124 +312,6 @@ class arduino():
         self.connect()
 
 
-
-
-# class arduino():
-#     '''this class is original arduino structure'''
-#     def __init__(self):
-#         self.port = ''
-#         self.serial_session = None
-#
-#     def start_arduino(self, port):
-#         self.port = port
-#         self.serial_session = serial.Serial(port=self.port, baudrate=9600)
-#
-#     def send_angle(self, value):
-#         if self.serial_session != None:
-#             try:
-#                 self.serial_session.flush()
-#             except:
-#                 print('flush error')
-#             data = 'angle%02d;' % value
-#             print(self.serial_session.write(data.encode()))
-#
-#     def send_speed(self, value):
-#         if self.serial_session != None:
-#
-#             try:
-#                 self.serial_session.flush()
-#             except:
-#                 print('flush error')
-#             data = 'speed'
-#             if value >= 0:
-#                 data += '+'
-#             else:
-#                 data += '-'
-#             data += '%03d;' % self.abs_value(value)
-#             self.serial_session.write(data.encode())
-#
-#     def abs_value(self, value):
-#         if value >= 0:
-#             return value
-#         else:
-#             return -1 * value
-#
-#     def stop_arduino(self):
-#         self.serial_session.close()
-#         self.port = ''
-#         self.serial_session = None
-#
-#     def setting(self):
-#         if self.serial_session != None:
-#             self.serial_session.write('setting;'.encode())
-
-
-# class arduino():
-#     '''this class is for preparing error'''
-#     def __init__(self):
-#         self.port = ''
-#         self.serial_session = None
-#         self.lock = threading.Lock()
-#
-#     def start_arduino(self, port):
-#         self.port = port
-#         try:
-#             self.serial_session = serial.Serial(port=self.port, baudrate=9600, timeout=1)
-#         except Exception as e:
-#             print(f"Error opening serial port: {e}")
-#             traceback.print_exc()
-#
-#     def send_angle(self, value):
-#         if self.serial_session is not None:
-#             with self.lock:
-#                 try:
-#                     self.serial_session.flush()
-#                     data = f'angle{value:02d};'
-#                     self.serial_session.write(data.encode())
-#                 except Exception as e:
-#                     print(f"Error sending angle: {e}")
-#                     self.reconnect()
-#
-#     def send_speed(self, value):
-#         if self.serial_session is not None:
-#             with self.lock:
-#                 try:
-#                     self.serial_session.flush()
-#                     sign = '+' if value >= 0 else '-'
-#                     data = f'speed{sign}{abs(value):03d};'
-#                     self.serial_session.write(data.encode())
-#                 except Exception as e:
-#                     print(f"Error sending speed: {e}")
-#                     self.reconnect()
-#
-#     def stop_arduino(self):
-#         self.serial_session.close()
-#         self.port = ''
-#         self.serial_session = None
-#
-#     def setting(self):
-#         if self.serial_session is not None:
-#             with self.lock:
-#                 try:
-#                     self.serial_session.flush()
-#                     self.serial_session.write('setting;'.encode())
-#                 except Exception as e:
-#                     print(f"Error sending speed: {e}")
-#                     self.reconnect()
-#
-#     def reconnect(self):
-#         print("Attempting to reconnect...")
-#         try:
-#             self.serial_session.close()
-#         except Exception as e:
-#             print(f"Error closing serial port: {e}")
-#         time.sleep(0.1)
-#         try:
-#             self.start_arduino(self.port)
-#             print("Reconnected.")
-#         except Exception as e:
-#             print(f"Reconnection failed: {e}")
-
 def parking():
     lidar_device.parking_step = 1
     while lidar_device.parking_step > 0:
@@ -456,14 +338,20 @@ def parking():
                     lidar_device.parking_step = 2  # 2단계(후진으로 각도 보정)으로 넘어감
                     time.sleep(2)
         elif lidar_device.parking_step == 2:
-            if abs(lidar_device.turn_angle) > 30:  # 어느정도는 넘어야 보정함
+            abs_angle = abs(lidar_device.turn_angle)
+            if abs_angle > 10:  # 어느정도는 넘어야 보정함
                 if lidar_device.turn_angle > 0:  # 차량이 우측으로 치우쳐짐
                     arduino_device.current_steering = 20
                 else:  # 차량이 좌측으로 치우쳐짐
                     arduino_device.current_steering = 0
                 time.sleep(0.1)
                 arduino_device.current_speed = -80
-                correction_time = abs(lidar_device.turn_angle) * lidar_device.BACK_PARAM
+                if abs_angle < 25:  # abs_turn_angle : 10 ~ 25
+                    correction_time = abs_angle * lidar_device.BACK_PARAM_1
+                elif abs_angle < 50: # abs_turn_angle : 25 ~ 50
+                    correction_time = abs_angle * lidar_device.BACK_PARAM_2
+                else:
+                    correction_time = abs_angle * lidar_device.BACK_PARAM_3
                 print(f'[STEP 2] Angle Correction : {correction_time} seconds')
                 time.sleep(correction_time)  # 각도 보정 완료
                 arduino_device.current_speed = 0
@@ -896,18 +784,16 @@ class MyApp(QWidget):
                     return
 
                 # [ STEP 1 ]
-                arduino_device.current_speed = 255
                 maincam_device.capture = True
                 subcam_device.capture = False
                 subcam_device.avoid_state = False
                 subcam_device.traffic_state = False
                 subcam_device.cross_state = False
-                time.sleep(5.5)
+                arduino_device.current_speed = 255
+                time.sleep(5.5)  # 첫 장애물로 인한 대기 시간
 
                 # [ STEP 2 ]
-                maincam_device.capture = False
                 turn_left()
-                maincam_device.capture = True
 
                 # [ STEP 3 ]
                 time.sleep(2)  # 이 부분 회피에서 수정해야할수도
@@ -923,7 +809,8 @@ class MyApp(QWidget):
                 self.slow_stop()
         elif self.checkbox_park.isChecked():
             if not self.driving_state:
-                parking()
+                parking_thread = threading.Thread(target=parking, daemon=True)
+                parking_thread.start()
             else:
                 arduino_device.current_speed = 0
         elif self.checkbox_manual.isChecked():
@@ -1091,20 +978,31 @@ class MyApp(QWidget):
 
 
 def turn_left():
+    '''
+    왼쪽차선으로 갈아탈 때 사용하는 함수
+    메인 카메라 끔 -> 좌측 스티어링 0.9s -> line_name 변경 -> 메인 카메라 켬
+    '''
+    maincam_device.capture = False
     time.sleep(0.1)  # originally, 0.05
     arduino_device.current_steering = 0
     time.sleep(0.9)
     arduino_device.current_steering = 10
     maincam_device.line_name = 'llline'
-
+    maincam_device.capture = True
 
 
 def turn_right():
+    '''
+    우측차선으로 갈아탈 때 사용하는 함수
+    메인 카메라 끔 -> 우측 스티어링 0.7s -> line_name 변경 -> 메인 카메라 켬
+    '''
+    maincam_device.capture = False
     time.sleep(0.1)  # originally, 0.05
     arduino_device.current_steering = 20
     time.sleep(0.7)
     arduino_device.current_steering = 10
     maincam_device.line_name = 'rrline'
+    maincam_device.capture = True
 
 
 def subcam_task():
@@ -1153,46 +1051,14 @@ def subcam_task():
                         averagex = int((box.xyxy[0][0] + box.xyxy[0][2]) / 2)
                         # 중심점이 왼쪽이면 무시, 가운데쯤 있으면 회피기동
                         if 220 <= averagex <= 480:
-                            # maincam_device.capture = False
-                            # avoid_car_speed255()
-                            # maincam_device.capture = True
-                            # subcam_device.avoid_state = False
-                            # subcam_device.traffic_state = True
-                            # arduino_device.current_speed = 0
                             subcam_device.avoid_state = False
-                            maincam_device.capture = False
                             turn_right()
-                            maincam_device.capture = True
                             time.sleep(3)
                             arduino_device.current_speed = 150
                             maincam_device.angle_max = int(maincam_device.angle_max * 0.95)
                             maincam_device.angle_min = int(maincam_device.angle_min * 0.95)
                             # subcam_device.traffic_state = True
                             subcam_device.cross_state = True
-
-                            # if maincam_device.line_name == 'rrline':
-                            #     subcam_device.found_num += 1
-                            #     subcam_device.capture = False
-                            #     maincam_device.capture = False
-                            #     turn_left()
-                            #     maincam_device.line_name = 'llline'
-                            #     maincam_device.capture = True
-                            #     time.sleep(0.5)
-                            #     subcam_device.capture = True
-                            # elif maincam_device.line_name == 'llline':
-                            #     subcam_device.found_num += 1
-                            #     subcam_device.capture = False
-                            #     maincam_device.capture = False
-                            #     turn_right()
-                            #     maincam_device.line_name = 'rrline'
-                            #     maincam_device.capture = True
-                            #     time.sleep(0.5)
-                            #     subcam_device.capture = True
-                            # if subcam_device.found_num == 2:
-                            #     subcam_device.avoid_state = False
-                            #     subcam_device.traffic_state = True
-                            #     subcam_device.found_num = 0
-                            #
                             break
             # if subcam_device.record:
             #     subcam_device.writer_orig.write(frame)

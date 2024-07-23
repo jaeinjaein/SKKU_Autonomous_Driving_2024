@@ -48,96 +48,96 @@ def apply_random_brightness_contrast(image):
 def augment_image(image_path, num_sunlight_effects=2):
     image = cv2.imread(image_path)
 
-    image = apply_various_sunlight_effects(image, num_sunlight_effects)
+    # image = apply_various_sunlight_effects(image, num_sunlight_effects)
     image = apply_random_blur(image)
     image = apply_random_brightness_contrast(image)
 
     return image
 
 
-# if __name__ == '__main__':
-#     dataset_folders = ['./road_finder_dataset/train',
-#                        './road_finder_dataset/valid',
-#                        './road_finder_dataset/test']
-#     num = 0
-#     dataset_name = 'road_finder_augmented'
-#     output_folder = time.strftime('%Y-%m-%d-%H%M%S', time.localtime()) + f'_{dataset_name}'
-#
-#     train_rate, valid_rate, test_rate = 0.8, 0.15, 0.05
-#
-#     os.mkdir(f'./{output_folder}')
-#     os.mkdir(f'./{output_folder}/train')
-#     os.mkdir(f'./{output_folder}/valid')
-#     os.mkdir(f'./{output_folder}/test')
-#     os.mkdir(f'./{output_folder}/train/images')
-#     os.mkdir(f'./{output_folder}/valid/images')
-#     os.mkdir(f'./{output_folder}/test/images')
-#     os.mkdir(f'./{output_folder}/train/labels')
-#     os.mkdir(f'./{output_folder}/valid/labels')
-#     os.mkdir(f'./{output_folder}/test/labels')
-#     result_names = []
-#     for dataset_folder in dataset_folders:
-#         for img_name in os.listdir(dataset_folder + '/images'):
-#             image_path = f'{dataset_folder}/images/{img_name[:-4]}.jpg'
-#             label_path = f'{dataset_folder}/labels/{img_name[:-4]}.txt'
-#             img_aug1, img_aug2 = augment_image(image_path), augment_image(image_path)
-#             copyfile(f'./{dataset_folder}/images/{img_name[:-4]}.jpg', f'./{output_folder}/train/images/{img_name[:-4]}_{num}.jpg')
-#             copyfile(f'./{dataset_folder}/labels/{img_name[:-4]}.txt', f'./{output_folder}/train/labels/{img_name[:-4]}_{num}.txt')
-#             result_names.append(f'{img_name[:-4]}_{num}')
-#             num += 1
-#             cv2.imwrite(f'./{output_folder}/train/images/{img_name[:-4]}_{num}.jpg', img_aug1)
-#             copyfile(f'./{dataset_folder}/labels/{img_name[:-4]}.txt', f'./{output_folder}/train/labels/{img_name[:-4]}_{num}.txt')
-#             result_names.append(f'{img_name[:-4]}_{num}')
-#             num += 1
-#             cv2.imwrite(f'./{output_folder}/train/images/{img_name[:-4]}_{num}.jpg', img_aug2)
-#             copyfile(f'./{dataset_folder}/labels/{img_name[:-4]}.txt', f'./{output_folder}/train/labels/{img_name[:-4]}_{num}.txt')
-#             result_names.append(f'{img_name[:-4]}_{num}')
-#             num = 0
-#
-#     random.shuffle(result_names)
-#     train_names = result_names[:int(train_rate * len(result_names))]
-#     valid_names = result_names[int(train_rate * len(result_names)):int((train_rate + valid_rate) * len(result_names))]
-#     test_names = result_names[int((train_rate + valid_rate) * len(result_names)):]
-#     for name in valid_names:
-#         copyfile(f'./{output_folder}/train/images/{name}.jpg',
-#                  f'./{output_folder}/valid/images/{name}.jpg')
-#         os.remove(f'./{output_folder}/train/images/{name}.jpg')
-#         copyfile(f'./{output_folder}/train/labels/{name}.txt',
-#                  f'./{output_folder}/valid/labels/{name}.txt')
-#         os.remove(f'./{output_folder}/train/labels/{name}.txt')
-#     for name in test_names:
-#         copyfile(f'./{output_folder}/train/images/{name}.jpg',
-#                  f'./{output_folder}/test/images/{name}.jpg')
-#         os.remove(f'./{output_folder}/train/images/{name}.jpg')
-#         copyfile(f'./{output_folder}/train/labels/{name}.txt',
-#                  f'./{output_folder}/test/labels/{name}.txt')
-#         os.remove(f'./{output_folder}/train/labels/{name}.txt')
+if __name__ == '__main__':
+    dataset_folders = ['./subcam_dataset/train',
+                       './subcam_dataset/valid',
+                       './subcam_dataset/test']
+    num = 0
+    dataset_name = 'subcam_augmented'
+    output_folder = time.strftime('%Y-%m-%d-%H%M%S', time.localtime()) + f'_{dataset_name}'
+
+    train_rate, valid_rate, test_rate = 0.8, 0.15, 0.05
+
+    os.mkdir(f'./{output_folder}')
+    os.mkdir(f'./{output_folder}/train')
+    os.mkdir(f'./{output_folder}/valid')
+    os.mkdir(f'./{output_folder}/test')
+    os.mkdir(f'./{output_folder}/train/images')
+    os.mkdir(f'./{output_folder}/valid/images')
+    os.mkdir(f'./{output_folder}/test/images')
+    os.mkdir(f'./{output_folder}/train/labels')
+    os.mkdir(f'./{output_folder}/valid/labels')
+    os.mkdir(f'./{output_folder}/test/labels')
+    result_names = []
+    for dataset_folder in dataset_folders:
+        for img_name in os.listdir(dataset_folder + '/images'):
+            image_path = f'{dataset_folder}/images/{img_name[:-4]}.jpg'
+            label_path = f'{dataset_folder}/labels/{img_name[:-4]}.txt'
+            img_aug1, img_aug2 = augment_image(image_path), augment_image(image_path)
+            copyfile(f'./{dataset_folder}/images/{img_name[:-4]}.jpg', f'./{output_folder}/train/images/{img_name[:-4]}_{num}.jpg')
+            copyfile(f'./{dataset_folder}/labels/{img_name[:-4]}.txt', f'./{output_folder}/train/labels/{img_name[:-4]}_{num}.txt')
+            result_names.append(f'{img_name[:-4]}_{num}')
+            num += 1
+            cv2.imwrite(f'./{output_folder}/train/images/{img_name[:-4]}_{num}.jpg', img_aug1)
+            copyfile(f'./{dataset_folder}/labels/{img_name[:-4]}.txt', f'./{output_folder}/train/labels/{img_name[:-4]}_{num}.txt')
+            result_names.append(f'{img_name[:-4]}_{num}')
+            num += 1
+            cv2.imwrite(f'./{output_folder}/train/images/{img_name[:-4]}_{num}.jpg', img_aug2)
+            copyfile(f'./{dataset_folder}/labels/{img_name[:-4]}.txt', f'./{output_folder}/train/labels/{img_name[:-4]}_{num}.txt')
+            result_names.append(f'{img_name[:-4]}_{num}')
+            num = 0
+
+    random.shuffle(result_names)
+    train_names = result_names[:int(train_rate * len(result_names))]
+    valid_names = result_names[int(train_rate * len(result_names)):int((train_rate + valid_rate) * len(result_names))]
+    test_names = result_names[int((train_rate + valid_rate) * len(result_names)):]
+    for name in valid_names:
+        copyfile(f'./{output_folder}/train/images/{name}.jpg',
+                 f'./{output_folder}/valid/images/{name}.jpg')
+        os.remove(f'./{output_folder}/train/images/{name}.jpg')
+        copyfile(f'./{output_folder}/train/labels/{name}.txt',
+                 f'./{output_folder}/valid/labels/{name}.txt')
+        os.remove(f'./{output_folder}/train/labels/{name}.txt')
+    for name in test_names:
+        copyfile(f'./{output_folder}/train/images/{name}.jpg',
+                 f'./{output_folder}/test/images/{name}.jpg')
+        os.remove(f'./{output_folder}/train/images/{name}.jpg')
+        copyfile(f'./{output_folder}/train/labels/{name}.txt',
+                 f'./{output_folder}/test/labels/{name}.txt')
+        os.remove(f'./{output_folder}/train/labels/{name}.txt')
 #
 #
 #
 #
 # # 이미지 불러오기
-image_path = './test_image.jpg'
-image = cv2.imread(image_path)
-
-
-model_1 = YOLO('../models/yolov8m-ep200-unf-d3.pt', task='segment')
-model_2 = YOLO('../models/yolov8m-ep200-unf-d4.pt', task='segment')
-model_1.to('mps')
-model_2.to('mps')
-
-while True:
-    # 햇빛 효과 적용
-    augmented_image = augment_image(image_path)
-
-    # 결과 이미지 저장
-    cv2.imwrite('augmented_image.jpg', augmented_image)
-    results_1 = model_1(augmented_image, conf=0.4, device='mps')
-    augmented_image_1 = results_1[0].plot()
-    results_2 = model_2(augmented_image, conf=0.4, device='mps')
-    augmented_image_2 = results_2[0].plot()
-    # 결과 이미지 보기 (옵션)
-    result = np.concatenate([augmented_image_1, augmented_image_2], axis=1)
-    cv2.imshow('Sunlight Effect', result)
-    cv2.waitKey(30)
+# image_path = './test_image.jpg'
+# image = cv2.imread(image_path)
+#
+#
+# model_1 = YOLO('../models/yolov8m-ep200-unf-d3.pt', task='segment')
+# model_2 = YOLO('../models/yolov8m-ep200-unf-d4.pt', task='segment')
+# model_1.to('mps')
+# model_2.to('mps')
+#
+# while True:
+#     # 햇빛 효과 적용
+#     augmented_image = augment_image(image_path)
+#
+#     # 결과 이미지 저장
+#     cv2.imwrite('augmented_image.jpg', augmented_image)
+#     results_1 = model_1(augmented_image, conf=0.4, device='mps')
+#     augmented_image_1 = results_1[0].plot()
+#     results_2 = model_2(augmented_image, conf=0.4, device='mps')
+#     augmented_image_2 = results_2[0].plot()
+#     # 결과 이미지 보기 (옵션)
+#     result = np.concatenate([augmented_image_1, augmented_image_2], axis=1)
+#     cv2.imshow('Sunlight Effect', result)
+#     cv2.waitKey(30)
 
