@@ -34,6 +34,7 @@ class subcam():
         self.fps = 5.0
         self.capture = False
         self.avoid_state = False
+        self.cross_state = False
         self.traffic_state = False
         self.model(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.2)
         self.found_num = 0
@@ -102,9 +103,9 @@ class subcam():
 class maincam():
     def __init__(self):
         self.cap = None
-        self.model = YOLO('./models/yolov8m-ep200-unf-d4.pt', task='segment')
-        self.model.to('mps')
+        self.model = YOLO('./models/yolov8x-ep200-unf-d4.pt', task='segment')
         self.model.half()
+        self.model.to('mps')
         self.record = False
         self.save_statistics = True
         self.SAMPLING_RATE = 0.8
@@ -228,7 +229,9 @@ class lidar():
         self.car_b = None
         self.turn_angle = 0.0
 
-        self.BACK_PARAM = 0.015
+        self.BACK_PARAM_1 = 0.015
+        self.BACK_PARAM_2 = 0.015
+        self.BACK_PARAM_3 = 0.015
         self.STEP3_DISTANCE_OFFSET = 1000
         self.STEP3_BACK_PARAM = 0.005
 
@@ -427,7 +430,6 @@ class arduino():
 #         except Exception as e:
 #             print(f"Reconnection failed: {e}")
 
-
 def parking():
     lidar_device.parking_step = 1
     while lidar_device.parking_step > 0:
@@ -439,17 +441,18 @@ def parking():
                 time.sleep(0.1)
                 continue
             distance, lidar_car = lidar_analyze(lidar_device.scan_data)  # 여기 car detect 함수 만들어서, 우측 차량과 거리 검출
-            print(distance)
             if lidar_car is not None:
                 if lidar_device.car_a is None:
                     lidar_device.car_a_dist, lidar_device.car_a = distance, lidar_car
+                    print(f'[STEP 1] Car A Detected : distance is {distance}mm')
                     time.sleep(2)
                 elif lidar_device.car_b is None:
                     arduino_device.current_speed = 0
                     lidar_device.car_b_dist, lidar_device.car_b = distance, lidar_car
+                    print(f'[STEP 1] Car B Detected : distance is {distance}mm')
                     y_diff = lidar_device.car_b_dist - lidar_device.car_a_dist
                     lidar_device.turn_angle = math.atan(-1 * y_diff / 100) * 180 / math.pi  # 비틀림 각도 산출 (car_a의 가장 좌측, car_b의 가장 좌측 좌표를 통해)
-                    print(lidar_device.turn_angle)
+                    print(f'[STEP 1] Error Angle : {lidar_device.turn_angle} degree')
                     lidar_device.parking_step = 2  # 2단계(후진으로 각도 보정)으로 넘어감
                     time.sleep(2)
         elif lidar_device.parking_step == 2:
@@ -460,9 +463,12 @@ def parking():
                     arduino_device.current_steering = 0
                 time.sleep(0.1)
                 arduino_device.current_speed = -80
-                time.sleep(abs(lidar_device.turn_angle) * lidar_device.BACK_PARAM)  # 각도 보정 완료
+                correction_time = abs(lidar_device.turn_angle) * lidar_device.BACK_PARAM
+                print(f'[STEP 2] Angle Correction : {correction_time} seconds')
+                time.sleep(correction_time)  # 각도 보정 완료
                 arduino_device.current_speed = 0
-                arduino_device.current_steering = 10
+            arduino_device.current_steering = 10
+            print(f'[STEP 2] Back for 1.5s')
             time.sleep(0.1)
             arduino_device.current_speed = -50
             time.sleep(1.5)
@@ -473,62 +479,22 @@ def parking():
             arduino_device.current_speed = 50
             distance, lidar_car = lidar_analyze(lidar_device.scan_data)  # 다시 우측 차량 찾도록
             if lidar_car is not None:  # 우측 차량 감지 --> 차량 멈추고, 거리에 따라 다음 행동 결정
-                # arduino_device.current_speed = 50
-                # # if distance < 800:  # ~ 800  -> 두번에 걸쳐 수직만들기 (아직 고려 X)
-                # #     pass
-                # # else:
-                # time.sleep(1.5)
-                # arduino_device.current_steering = 20
-                # time.sleep(0.05)
-                # arduino_device.current_speed = -80
-                # time.sleep(6)
-                # arduino_device.current_steering = 10
-                # #time.sleep((distance - lidar_device.STEP3_DISTANCE_OFFSET) * lidar_device.STEP3_BACK_PARAM)
-                # time.sleep(2)
-                # arduino_device.current_speed = 0
-                # time.sleep(3)
-                # # 주차 완료
-                # lidar_device.parking_step += 1
+                print(f'[STEP 3] Car Detected : distance is {distance}mm')
                 arduino_device.current_speed = 0
                 time.sleep(.1)
                 if distance < 1000:
-                    arduino_device.current_steering = 0
-                    time.sleep(.1)
-                    arduino_device.current_speed = 50
-                    time.sleep(2)
-                    arduino_device.current_steering = 10
-                    time.sleep(1)
-                    arduino_device.current_steering = 20
-                    time.sleep(2.1)
-                    arduino_device.current_steering = 10
-                    time.sleep(1)
-                    arduino_device.current_speed = 0
-                    time.sleep(1)
-                    arduino_device.current_speed = -50
-                    time.sleep(6.2)
-                    arduino_device.current_speed = 0
-                    time.sleep(0.5)
+                    parking_20cm_far()
                 arduino_device.current_speed = -50
                 time.sleep(5)
                 arduino_device.current_speed = 0
                 time.sleep(.1)
-                arduino_device.current_steering = 0
-                time.sleep(.5)
-                arduino_device.current_speed = 50
-                time.sleep(3)
-                arduino_device.current_speed = 0
-                time.sleep(1)
-                arduino_device.current_steering = 20
-                time.sleep(.4)
-                arduino_device.current_speed = -50
-                time.sleep(9)
-                arduino_device.current_speed = 0
-
-                time.sleep(0.5)
+                parking_90turn()
+                # 이부분 알고리즘 수정 필요
                 arduino_device.current_steering = 10
                 time.sleep(0.5)
                 arduino_device.current_speed = -50
                 time.sleep(2)
+                # 이부분 알고리즘 수정 필요
                 if distance > 1000:
                     time.sleep((distance - lidar_device.STEP3_DISTANCE_OFFSET) * lidar_device.STEP3_BACK_PARAM)
                 arduino_device.current_speed = 0
@@ -548,6 +514,39 @@ def parking():
         time.sleep(0.1)
 
 
+def parking_20cm_far():
+    arduino_device.current_steering = 0
+    time.sleep(.1)
+    arduino_device.current_speed = 50
+    time.sleep(2)
+    arduino_device.current_steering = 10
+    time.sleep(1)
+    arduino_device.current_steering = 20
+    time.sleep(2.1)
+    arduino_device.current_steering = 10
+    time.sleep(1)
+    arduino_device.current_speed = 0
+    time.sleep(1)
+    arduino_device.current_speed = -50
+    time.sleep(6.2)
+    arduino_device.current_speed = 0
+    time.sleep(0.5)
+
+
+def parking_90turn():
+    arduino_device.current_steering = 0
+    time.sleep(.5)
+    arduino_device.current_speed = 50
+    time.sleep(3)
+    arduino_device.current_speed = 0
+    time.sleep(1)
+    arduino_device.current_steering = 20
+    time.sleep(.4)
+    arduino_device.current_speed = -50
+    time.sleep(9)
+    arduino_device.current_speed = 0
+
+    time.sleep(0.5)
 
 class MyApp(QWidget):
     def __init__(self):
@@ -563,6 +562,9 @@ class MyApp(QWidget):
         self.recording = False
 
     def initUI(self):
+        '''
+        UI의 레이아웃을 만들고, 기능을 연결하는 함수
+        '''
         layout = QGridLayout()
 
         # Left top checkbox group
@@ -673,6 +675,14 @@ class MyApp(QWidget):
         self.show()
 
     def createDeviceSelectionLayout(self, parentLayout, labelText, populateFunc, comboBox, selectButton, selectFunc):
+        '''
+        Device Selection Layout (1Label:device_type, 1Combobox:device_list, 1Button:device_select) 을 만드는 함수
+        parentLayout : master UI의 우측상단 QVBoxLayout
+        labelText : label에 들어갈 이름
+        populateFunc : combobox에 해당 device들 찾아서 입력
+        comboBox, selectButton : 각 combobox, selectbutton의 객체를 넣어주면 됨
+        selectFunc : 선택될 때 Button과 연결되는 함수
+        '''
         hbox = QHBoxLayout()
         label = QLabel(labelText)
         populateFunc(comboBox)
@@ -683,6 +693,10 @@ class MyApp(QWidget):
         parentLayout.addLayout(hbox)
 
     def populateCamComboBox(self, comboBox):
+        '''
+        카메라 Combobox를 다시 불러올때 사용하는 함수
+        '''
+        comboBox.clear()
         index = 0
         while index < 10:
             cap = cv2.VideoCapture(index)
@@ -692,12 +706,18 @@ class MyApp(QWidget):
             index += 1
 
     def populateSerialComboBox(self, comboBox):
+        '''
+        시리얼 Combobox를 불러올 때 사용
+        '''
         comboBox.clear()
         ports = serial.tools.list_ports.comports()
         for port in ports:
             comboBox.addItem(port.device)
 
     def modeChanged(self, checkbox):
+        '''
+        modeChanged를 변경할 때 (checkbox들을 왔다갔다 할 때) 모드를 정해주고, complement하게 작동하도록 하는 함수
+        '''
         if checkbox.isChecked():
             if checkbox == self.checkbox_drive:
                 self.driving_mode = 'drive'
@@ -731,6 +751,9 @@ class MyApp(QWidget):
                 self.checkbox_test.setChecked(False)
     
     def recordChanged(self):
+        '''
+        녹화기능을 활성/비활성화 시킬 때 사용하는 함수
+        '''
         maincam_device.record = self.checkbox_record.isChecked()
         subcam_device.record = self.checkbox_record.isChecked()
         if self.checkbox_record.isChecked():
@@ -739,6 +762,9 @@ class MyApp(QWidget):
             self.record_starttime = 0
 
     def selectCamDevice(self, comboBox, selectButton):
+        '''
+        메인 카메라 선택 버튼을 눌렀을 때 실행되는 함수
+        '''
         if maincam_device.cap is None:
             index = int(comboBox.currentText())
             comboBox.setEnabled(False)
@@ -752,6 +778,9 @@ class MyApp(QWidget):
             #self.checkboxRecord.setEnabled(True)
             
     def selectSubCamDevice(self, comboBox, selectButton):
+        '''
+        서브 카메라 선택 버튼을 눌렀을 때 실행되는 함수
+        '''
         if subcam_device.cap is None:
             index = int(comboBox.currentText())
             comboBox.setEnabled(False)
@@ -765,6 +794,9 @@ class MyApp(QWidget):
             #self.checkboxRecord.setEnabled(False)
 
     def selectLidarDevice(self, comboBox, selectButton):
+        '''
+        라이다 기기 선택 버튼을 눌렀을 때 실행되는 함수
+        '''
         if lidar_device.lidar_session is None:
             port = comboBox.currentText()
             comboBox.setEnabled(False)
@@ -776,6 +808,9 @@ class MyApp(QWidget):
             selectButton.setText("Connect")
 
     def selectArdDevice(self, comboBox, selectButton):
+        '''
+        아두이노 기기 선택 버튼을 눌렀을 때 실행되는 함수
+        '''
         if arduino_device.serial_session is None:
             port = comboBox.currentText()
             comboBox.setEnabled(False)
@@ -787,6 +822,9 @@ class MyApp(QWidget):
             selectButton.setText("Connect")
 
     def set_checkboxes_enabled(self, enabled):
+        '''
+        기능이 실행/종료될 때 실행시킴으로써 checkbox들을 활성/비활성화
+        '''
         self.checkbox_drive.setEnabled(enabled)
         self.checkbox_mission.setEnabled(enabled)
         self.checkbox_park.setEnabled(enabled)
@@ -795,6 +833,9 @@ class MyApp(QWidget):
         self.checkbox_record.setEnabled(enabled)
 
     def slow_stop(self):
+        '''
+        차량 천천히 종료되는 함수
+        '''
         arduino_device.current_speed = 200
         time.sleep(0.2)
         arduino_device.current_speed = 150
@@ -806,16 +847,28 @@ class MyApp(QWidget):
         arduino_device.current_speed = 0
 
     def Start_Driving(self):
+        '''
+        Start/Stop Button을 누르거나, keyboard S를 눌렀을 때 실행되는 함수
+        '''
         if self.checkbox_drive.isChecked():
+            '''
+            주행 모드 : MainCam, Subcam, Arduino 모두 활성화 되어 있지 않으면 경고창, 활성화 시 속도 255 / slow_stop
+            '''
             if not self.driving_state:
                 if maincam_device.cap is None or subcam_device.cap is None or arduino_device.serial_session is None:
                     QMessageBox.information(self, 'Warning', 'Please Connect MainCam, SubCam, Arduino.',
                                             QMessageBox.Ok)
                     return
+                maincam_device.capture = True
+                subcam_device.capture = True
+                maincam_device.line_name = 'rrline'
                 arduino_device.current_speed = 255
             else:
                 self.slow_stop()
         elif self.checkbox_test.isChecked():
+            '''
+            테스트 모드 : MainCam, Subcam에 각 경로에 있는 영상을 카메라에 입력으로 주고 테스트
+            '''
             if not self.driving_state:
                 if maincam_device.cap != None:
                     return
@@ -829,33 +882,50 @@ class MyApp(QWidget):
                 maincam_device.stop_video()
                 subcam_device.stop_video()
         elif self.checkbox_mission.isChecked():
+            '''
+            미션 모드
+            순서
+            STEP 1 : 5.5초간 서브카메라 비활성화
+            STEP 2 : 메인카메라 비활성화 -> 좌측 라인 변경 -> 메인카메라 활성화 (좌측라인으로 달림)
+            STEP 3 : 2초간 가만있고 서브카메라 / 장애물 회피 활성화
+            '''
             if not self.driving_state:
                 if maincam_device.cap is None or subcam_device.cap is None or arduino_device.serial_session is None:
                     QMessageBox.information(self, 'Warning', 'Please Connect MainCam, SubCam, Arduino.',
                                             QMessageBox.Ok)
                     return
+
+                # [ STEP 1 ]
                 arduino_device.current_speed = 255
+                maincam_device.capture = True
                 subcam_device.capture = False
-                time.sleep(4.5)
-                # subcam_device.avoid_state = True
+                subcam_device.avoid_state = False
+                subcam_device.traffic_state = False
+                subcam_device.cross_state = False
+                time.sleep(5.5)
+
+                # [ STEP 2 ]
                 maincam_device.capture = False
                 turn_left()
                 maincam_device.capture = True
-                time.sleep(2)
+
+                # [ STEP 3 ]
+                time.sleep(2)  # 이 부분 회피에서 수정해야할수도
                 subcam_device.capture = True
                 subcam_device.avoid_state = True
-
-
             else:
+                maincam_device.capture = True
+                subcam_device.capture = True
                 subcam_device.avoid_state = False
                 subcam_device.traffic_state = False
+                subcam_device.cross_state = False
+                maincam_device.line_name = 'rrline'
                 self.slow_stop()
         elif self.checkbox_park.isChecked():
             if not self.driving_state:
                 parking()
             else:
                 arduino_device.current_speed = 0
-                pass
         elif self.checkbox_manual.isChecked():
             arduino_device.current_speed = 0
             arduino_device.current_steering = 10
@@ -1020,25 +1090,6 @@ class MyApp(QWidget):
         self.lidar_image_writer.release()
 
 
-def avoid_car_speed150():
-    time.sleep(0.1)
-    arduino_device.current_steering = 0
-    time.sleep(0.1)
-    arduino_device.current_speed = 150
-    time.sleep(1.3)
-    arduino_device.current_steering = 20
-    time.sleep(1.9)
-    arduino_device.current_steering = 10
-    time.sleep(0.5)
-    arduino_device.current_steering = 20
-    time.sleep(1.3)
-    arduino_device.current_steering = 0
-    time.sleep(1.1)
-    arduino_device.current_steering = 10
-    time.sleep(0.1)
-    arduino_device.current_speed = 170
-
-
 def turn_left():
     time.sleep(0.1)  # originally, 0.05
     arduino_device.current_steering = 0
@@ -1056,26 +1107,6 @@ def turn_right():
     maincam_device.line_name = 'rrline'
 
 
-def avoid_car_speed255():
-    time.sleep(0.1)
-    arduino_device.current_steering = 0
-    time.sleep(0.1)
-    arduino_device.current_speed = 255
-    time.sleep(0.6)
-    arduino_device.current_steering = 20
-    time.sleep(1.2)
-    arduino_device.current_steering = 10
-    time.sleep(0.45)
-    # 원래 버전
-    arduino_device.current_steering = 20
-    time.sleep(0.65)
-    # arduino_device.current_steering = 0
-    # time.sleep(1.0)
-    # arduino_device.current_steering = 10
-    #time.sleep(0.1)
-    arduino_device.current_speed = 170
-
-
 def subcam_task():
     if subcam_device.cap is not None and subcam_device.capture:
         ret, frame = subcam_device.cap.read()
@@ -1084,6 +1115,15 @@ def subcam_task():
             results = subcam_device.model(frame, device='mps', conf=0.6, verbose=False)
             subcam_device.update_img = results[0].plot()
             for idx, box in enumerate(results[0].boxes):
+                if int(box.cls) == 2 and subcam_device.cross_state:
+                    cross_walk_width = int(box.xyxy[2] - box.xyxy[0])
+                    cross_walk_height = int(box.xyxy[3] - box.xyxy[1])
+                    # box 좌표로 판단하는 기준 만들고, 그 기준 넘어가면 멈춤 -> cross_state = False, traffic_state = True
+                    if False:  # 여기에 판단문 만들어주기
+                        arduino_device.current_speed = 0
+                        subcam_device.cross_state = False
+                        subcam_device.traffic_state = True
+
                 if int(box.cls) == 1 and subcam_device.traffic_state:
                     traffic_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
                     traffic_point_y = int(box.xyxy[0][3] + box.xyxy[0][1]) // 2
@@ -1127,7 +1167,8 @@ def subcam_task():
                             arduino_device.current_speed = 150
                             maincam_device.angle_max = int(maincam_device.angle_max * 0.95)
                             maincam_device.angle_min = int(maincam_device.angle_min * 0.95)
-                            subcam_device.traffic_state = True
+                            # subcam_device.traffic_state = True
+                            subcam_device.cross_state = True
 
                             # if maincam_device.line_name == 'rrline':
                             #     subcam_device.found_num += 1

@@ -11,6 +11,7 @@ from sklearn.linear_model import RANSACRegressor
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 from sklearn.linear_model import LinearRegression
+import torch
 
 MAKE_LOG = False
 LOG_FOLDER = './log/meanline'

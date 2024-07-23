@@ -122,7 +122,7 @@ image = cv2.imread(image_path)
 
 
 model_1 = YOLO('../models/yolov8m-ep200-unf-d3.pt', task='segment')
-model_2 = YOLO('../models/yolov8m-ep200-frz-d4.pt', task='segment')
+model_2 = YOLO('../models/yolov8m-ep200-unf-d4.pt', task='segment')
 model_1.to('mps')
 model_2.to('mps')
 
