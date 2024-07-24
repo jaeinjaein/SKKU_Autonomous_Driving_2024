@@ -1,6 +1,7 @@
 import sys
 import cv2
-from PyQt5.QtWidgets import QMessageBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox, QLabel, QComboBox, QPushButton, QGridLayout
+from PyQt5.QtWidgets import QMessageBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox, QLabel, \
+    QComboBox, QPushButton, QGridLayout
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import QTimer, Qt
 import threading
@@ -21,6 +22,7 @@ from lidar_process import lidar_analyze
 ard_list = []
 subcam_device, maincam_device, lidar_device, main_ui = None, None, None, None
 
+
 class subcam():
     def __init__(self):
         self.cap = None
@@ -30,7 +32,7 @@ class subcam():
         self.writer_orig = None
         self.writer_inferenced = None
         self.update_img = np.zeros((360, 640, 3), dtype=np.uint8)
-        self.steering_values = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+        self.steering_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
         self.fps = 5.0
         self.capture = False
         self.avoid_state = False
@@ -38,7 +40,7 @@ class subcam():
         self.traffic_state = False
         self.model(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.2)
         self.found_num = 0
-        
+
     def start_camera(self, device_index):
         if self.cap is not None:
             self.cap.release()
@@ -72,7 +74,8 @@ class subcam():
             formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
             fourcc = cv2.VideoWriter_fourcc(*'H264')
             self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
-            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, self.fps, (640, 360))
+            self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}.mp4', fourcc, self.fps,
+                                                     (640, 360))
         self.capture = True
 
     def stop_video(self):
@@ -89,7 +92,7 @@ class subcam():
         if self.record:
             self.writer_orig.release()
             self.writer_inferenced.release()
-            
+
     def load_params(self):
         with open('params_sub.txt', 'r') as f:
             lines = f.readlines()
@@ -98,7 +101,7 @@ class subcam():
                 name, val = line.split('=')
                 exec(f'self.{line}')
         print('sub cam param updated.')
-        
+
 
 class maincam():
     def __init__(self):
@@ -114,7 +117,7 @@ class maincam():
         self.update_img = np.zeros((360, 1280, 3), dtype=np.uint8)
         self.angle_min = -80
         self.angle_max = 80
-        self.steering_values = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+        self.steering_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
         self.poly_degree = 2
         self.fps = 10.0
         self.verbose = True
@@ -152,7 +155,7 @@ class maincam():
             self.cap.release()
         self.cap = cv2.VideoCapture(video_path)
         self.capture = True
-            
+
     def stop_camera(self):
         if self.save_statistics and len(self.statistics_list) > 0:
             local_time = time.localtime()
@@ -166,7 +169,7 @@ class maincam():
         if self.record:
             self.writer_orig.release()
             self.writer_inferenced.release()
-            
+
     def load_params(self):
         with open('params.txt', 'r') as f:
             lines = f.readlines()
@@ -235,8 +238,6 @@ class lidar():
         self.STEP3_DISTANCE_OFFSET = 1000
         self.STEP3_BACK_PARAM = 0.005
 
-
-
     def start_lidar(self, port):
         try:
             self.lidar_session = RPLidar(port)
@@ -256,7 +257,6 @@ class lidar():
             print(health)
             self.lidar_session.start_motor()
             time.sleep(2)
-
 
     def stop_lidar(self):
         self.lidar_session.stop()
@@ -333,7 +333,8 @@ def parking():
                     lidar_device.car_b_dist, lidar_device.car_b = distance, lidar_car
                     print(f'[STEP 1] Car B Detected : distance is {distance}mm')
                     y_diff = lidar_device.car_b_dist - lidar_device.car_a_dist
-                    lidar_device.turn_angle = math.atan(-1 * y_diff / 100) * 180 / math.pi  # 비틀림 각도 산출 (car_a의 가장 좌측, car_b의 가장 좌측 좌표를 통해)
+                    lidar_device.turn_angle = math.atan(
+                        -1 * y_diff / 100) * 180 / math.pi  # 비틀림 각도 산출 (car_a의 가장 좌측, car_b의 가장 좌측 좌표를 통해)
                     print(f'[STEP 1] Error Angle : {lidar_device.turn_angle} degree')
                     lidar_device.parking_step = 2  # 2단계(후진으로 각도 보정)으로 넘어감
                     time.sleep(2)
@@ -348,7 +349,7 @@ def parking():
                 arduino_device.current_speed = -80
                 if abs_angle < 25:  # abs_turn_angle : 10 ~ 25
                     correction_time = abs_angle * lidar_device.BACK_PARAM_1
-                elif abs_angle < 50: # abs_turn_angle : 25 ~ 50
+                elif abs_angle < 50:  # abs_turn_angle : 25 ~ 50
                     correction_time = abs_angle * lidar_device.BACK_PARAM_2
                 else:
                     correction_time = abs_angle * lidar_device.BACK_PARAM_3
@@ -436,6 +437,7 @@ def parking_90turn():
 
     time.sleep(0.5)
 
+
 class MyApp(QWidget):
     def __init__(self):
         global main_ui
@@ -483,31 +485,34 @@ class MyApp(QWidget):
         leftTopLayout.addLayout(manualLayout)
 
         self.leftTopGroup.setLayout(leftTopLayout)
-        
+
         # Right top driver select group
         self.rightTopGroup = QGroupBox('Device Select')
         rightTopLayout = QVBoxLayout()
 
-        
         self.deviceReloadButton = QPushButton('Device Reload')
         self.deviceReloadButton.clicked.connect(self.deviceReloadButtonClicked)
         rightTopLayout.addWidget(self.deviceReloadButton)
 
         self.camComboBox = QComboBox()
         self.camSelectButton = QPushButton('Connect')
-        self.createDeviceSelectionLayout(rightTopLayout, 'CAM Device', self.populateCamComboBox, self.camComboBox, self.camSelectButton, self.selectCamDevice)
-        
+        self.createDeviceSelectionLayout(rightTopLayout, 'CAM Device', self.populateCamComboBox, self.camComboBox,
+                                         self.camSelectButton, self.selectCamDevice)
+
         self.subcamComboBox = QComboBox()
         self.subcamSelectButton = QPushButton('Connect')
-        self.createDeviceSelectionLayout(rightTopLayout, 'SCAM Device', self.populateCamComboBox, self.subcamComboBox, self.subcamSelectButton, self.selectSubCamDevice)
+        self.createDeviceSelectionLayout(rightTopLayout, 'SCAM Device', self.populateCamComboBox, self.subcamComboBox,
+                                         self.subcamSelectButton, self.selectSubCamDevice)
 
         self.lidarComboBox = QComboBox()
         self.lidarSelectButton = QPushButton('Connect')
-        self.createDeviceSelectionLayout(rightTopLayout, 'Lidar Device', self.populateSerialComboBox, self.lidarComboBox, self.lidarSelectButton, self.selectLidarDevice)
+        self.createDeviceSelectionLayout(rightTopLayout, 'Lidar Device', self.populateSerialComboBox,
+                                         self.lidarComboBox, self.lidarSelectButton, self.selectLidarDevice)
 
         self.ardComboBox = QComboBox()
         self.ardSelectButton = QPushButton('Connect')
-        self.createDeviceSelectionLayout(rightTopLayout, 'Ard Device', self.populateSerialComboBox, self.ardComboBox, self.ardSelectButton, self.selectArdDevice)
+        self.createDeviceSelectionLayout(rightTopLayout, 'Ard Device', self.populateSerialComboBox, self.ardComboBox,
+                                         self.ardSelectButton, self.selectArdDevice)
 
         self.rightTopGroup.setLayout(rightTopLayout)
 
@@ -545,7 +550,7 @@ class MyApp(QWidget):
         rightBottomLayout.addWidget(self.speedm150Button)
         rightBottomLayout.addWidget(self.settingAngleButton)
         rightBottomLayout.addWidget(self.updateCamParamButton)
-        
+
         self.rightBottomGroup.setLayout(rightBottomLayout)
 
         layout.addWidget(self.leftTopGroup, 0, 0)
@@ -556,7 +561,7 @@ class MyApp(QWidget):
         self.setLayout(layout)
         self.setWindowTitle('Self Driving UI ver 1.0.5')
         self.setGeometry(300, 300, 800, 600)
-        
+
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.updateImage)
         self.timer.start(100)  # Update the image every 100 ms
@@ -637,7 +642,7 @@ class MyApp(QWidget):
                 self.checkbox_mission.setChecked(False)
                 self.checkbox_park.setChecked(False)
                 self.checkbox_test.setChecked(False)
-    
+
     def recordChanged(self):
         '''
         녹화기능을 활성/비활성화 시킬 때 사용하는 함수
@@ -658,13 +663,13 @@ class MyApp(QWidget):
             comboBox.setEnabled(False)
             maincam_device.start_camera(index)
             selectButton.setText("Disconnect")
-            #self.checkboxRecord.setEnabled(False)
+            # self.checkboxRecord.setEnabled(False)
         else:
             comboBox.setEnabled(True)
             maincam_device.stop_camera()
             selectButton.setText("Connect")
-            #self.checkboxRecord.setEnabled(True)
-            
+            # self.checkboxRecord.setEnabled(True)
+
     def selectSubCamDevice(self, comboBox, selectButton):
         '''
         서브 카메라 선택 버튼을 눌렀을 때 실행되는 함수
@@ -674,12 +679,12 @@ class MyApp(QWidget):
             comboBox.setEnabled(False)
             subcam_device.start_camera(index)
             selectButton.setText("Disconnect")
-            #self.checkboxRecord.setEnabled(False)
+            # self.checkboxRecord.setEnabled(False)
         else:
             comboBox.setEnabled(True)
             subcam_device.stop_camera()
             selectButton.setText("Connect")
-            #self.checkboxRecord.setEnabled(False)
+            # self.checkboxRecord.setEnabled(False)
 
     def selectLidarDevice(self, comboBox, selectButton):
         '''
@@ -796,7 +801,7 @@ class MyApp(QWidget):
                 turn_left()
 
                 # [ STEP 3 ]
-                time.sleep(2)  # 이 부분 회피에서 수정해야할수도
+                time.sleep(1.5)  # 이 부분 회피에서 수정해야할수도
                 subcam_device.capture = True
                 subcam_device.avoid_state = True
             else:
@@ -834,7 +839,8 @@ class MyApp(QWidget):
         main_image[360:, :640] = subcam_device.update_img
         main_image[360:, 640:1000] = lidar_device.update_img
         if self.recording:
-            self.checkbox_record.setText(f"RECORDING '{time.strftime('%M:%S', time.localtime(time.time() - self.record_starttime))}'")
+            self.checkbox_record.setText(
+                f"RECORDING '{time.strftime('%M:%S', time.localtime(time.time() - self.record_starttime))}'")
             if maincam_device.cap is not None:
                 self.main_cam_orig_writer.write(main_image[:360, :640])
                 self.main_cam_infer_writer.write(main_image[:360, 640:])
@@ -860,25 +866,25 @@ class MyApp(QWidget):
         img = img.rgbSwapped()
         self.sensorLabel.setPixmap(QPixmap.fromImage(img))
         self.sensorLabel.setScaledContents(True)
-        
+
     def speed255ButtonClicked(self):
         arduino_device.current_speed = 255
-        
+
     def speed150ButtonClicked(self):
         arduino_device.current_speed = 150
-        
+
     def speed080ButtonClicked(self):
         arduino_device.current_speed = 80
-        
+
     def speed000ButtonClicked(self):
         arduino_device.current_speed = 0
-    
+
     def speedm150ButtonClicked(self):
         arduino_device.current_speed = -150
-        
+
     def settingAngleButtonClicked(self):
         arduino_device.send_data('setting;')
-        
+
     def deviceReloadButtonClicked(self):
         # commands = [
         #     "echo 'dlwodls8747' | sudo -S chmod 777 /dev/ttyUSB*",
@@ -893,12 +899,10 @@ class MyApp(QWidget):
         self.populateCamComboBox(self.camComboBox)
         self.populateSerialComboBox(self.ardComboBox)
         self.populateSerialComboBox(self.lidarComboBox)
-    
+
     def updateCamParamButtonClicked(self):
         maincam_device.load_params()
         subcam_device.load_params()
-
-
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -959,10 +963,14 @@ class MyApp(QWidget):
         self.record_formatted_time = time.strftime('%Y-%m-%d-%H%M%S', time.localtime(self.record_starttime))
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         os.mkdir(f'./records/{self.record_formatted_time}')
-        self.main_cam_orig_writer = cv2.VideoWriter(f'./records/{self.record_formatted_time}/{self.record_formatted_time}_main.mp4', fourcc, 10.0, (640, 360))
-        self.main_cam_infer_writer = cv2.VideoWriter(f'./records/{self.record_formatted_time}/{self.record_formatted_time}_infer.mp4', fourcc, 10.0, (640, 360))
-        self.sub_cam_orig_writer = cv2.VideoWriter(f'./records/{self.record_formatted_time}/{self.record_formatted_time}_sub.mp4', fourcc, 10.0, (640, 360))
-        self.lidar_image_writer = cv2.VideoWriter(f'./records/{self.record_formatted_time}/{self.record_formatted_time}_lidar.mp4', fourcc, 10.0, (360, 360))
+        self.main_cam_orig_writer = cv2.VideoWriter(
+            f'./records/{self.record_formatted_time}/{self.record_formatted_time}_main.mp4', fourcc, 10.0, (640, 360))
+        self.main_cam_infer_writer = cv2.VideoWriter(
+            f'./records/{self.record_formatted_time}/{self.record_formatted_time}_infer.mp4', fourcc, 10.0, (640, 360))
+        self.sub_cam_orig_writer = cv2.VideoWriter(
+            f'./records/{self.record_formatted_time}/{self.record_formatted_time}_sub.mp4', fourcc, 10.0, (640, 360))
+        self.lidar_image_writer = cv2.VideoWriter(
+            f'./records/{self.record_formatted_time}/{self.record_formatted_time}_lidar.mp4', fourcc, 10.0, (360, 360))
         self.recording = True
 
     def stop_record(self):
@@ -985,7 +993,7 @@ def turn_left():
     maincam_device.capture = False
     time.sleep(0.1)  # originally, 0.05
     arduino_device.current_steering = 0
-    time.sleep(0.9)
+    time.sleep(0.85)
     arduino_device.current_steering = 10
     maincam_device.line_name = 'llline'
     maincam_device.capture = True
@@ -999,7 +1007,7 @@ def turn_right():
     maincam_device.capture = False
     time.sleep(0.1)  # originally, 0.05
     arduino_device.current_steering = 20
-    time.sleep(0.7)
+    time.sleep(0.75)
     arduino_device.current_steering = 10
     maincam_device.line_name = 'rrline'
     maincam_device.capture = True
@@ -1015,13 +1023,22 @@ def subcam_task():
             if subcam_device.capture:
                 for idx, box in enumerate(results[0].boxes):
                     if int(box.cls) == 2 and subcam_device.cross_state:
-                        cross_walk_width = int(box.xyxy[2] - box.xyxy[0])
-                        cross_walk_height = int(box.xyxy[3] - box.xyxy[1])
+                        cross_walk_width = int(box.xyxy[0][2] - box.xyxy[0][0])
+                        cross_walk_height = int(box.xyxy[0][3] - box.xyxy[0][1])
+                        cross_walk_upline = int(box.xyxy[0][1])
+
                         # box 좌표로 판단하는 기준 만들고, 그 기준 넘어가면 멈춤 -> cross_state = False, traffic_state = True
-                        if False:  # 여기에 판단문 만들어주기
+                        if int(cross_walk_upline) > 294:
                             arduino_device.current_speed = 0
+
                             subcam_device.cross_state = False
                             subcam_device.traffic_state = True
+                        print(cross_walk_upline)
+                        #if cross_walk_width * cross_walk_height > 41000:  # 여기에 판단문 만들어주기
+                        #    arduino_device.current_speed = 0
+                        #    subcam_device.cross_state = False
+                        #    subcam_device.traffic_state = True
+
 
                     if int(box.cls) == 1 and subcam_device.traffic_state:
                         traffic_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
@@ -1035,9 +1052,10 @@ def subcam_task():
                         print(f"Y : {[frame[traffic_point_y][traffic_y_x]]}")
                         print(f"G : {[frame[traffic_point_y][traffic_g_x]]}")
                         color_green = [frame[traffic_point_y][traffic_g_x]]
-                        if traffic_size > 17000:
-                            # arduino_device.current_speed = 0
-                            green_color = int(int(color_green[0][0]) + int(color_green[0][1]) + int(color_green[0][2])) // 3
+                        if traffic_size > 100:
+                            arduino_device.current_speed = 0
+                            green_color = int(
+                                int(color_green[0][0]) + int(color_green[0][1]) + int(color_green[0][2])) // 3
                             print(green_color)
                             if green_color > 230:
                                 arduino_device.current_speed = 150
@@ -1058,13 +1076,14 @@ def subcam_task():
                                 arduino_device.current_speed = 150
                                 maincam_device.angle_max = int(maincam_device.angle_max * 0.95)
                                 maincam_device.angle_min = int(maincam_device.angle_min * 0.95)
-                                # subcam_device.traffic_state = True
+                                #subcam_device.traffic_state = True
                                 subcam_device.cross_state = True
                                 break
+
             # if subcam_device.record:
             #     subcam_device.writer_orig.write(frame)
             t2 = time.time_ns()
-            #print(f'inference time : {(t2 - t1) / 1e+6}ms')
+            # print(f'inference time : {(t2 - t1) / 1e+6}ms')
             if subcam_device.update_img.shape[0] != 360 or subcam_device.update_img.shape[1] != 640:
                 subcam_device.update_img = cv2.resize(subcam_device.update_img, (640, 360))
 
@@ -1080,7 +1099,13 @@ def maincam_task():
         if ret:
             try:
                 t1 = time.time_ns()
-                img_inferenced, drawed_img, line1_ang, line2_ang, mid_bias = inf_angle_mainline(maincam_device.model, frame, maincam_device.SAMPLING_RATE, maincam_device.bev_width_offset, maincam_device.bev_height_offset, maincam_device.line_name, maincam_device.poly_degree)
+                img_inferenced, drawed_img, line1_ang, line2_ang, mid_bias = inf_angle_mainline(maincam_device.model,
+                                                                                                frame,
+                                                                                                maincam_device.SAMPLING_RATE,
+                                                                                                maincam_device.bev_width_offset,
+                                                                                                maincam_device.bev_height_offset,
+                                                                                                maincam_device.line_name,
+                                                                                                maincam_device.poly_degree)
                 steering_value = 9999.0
                 first = line1_ang
                 second = line2_ang
@@ -1088,7 +1113,8 @@ def maincam_task():
                     first = line2_ang
                     second = line1_ang
                 if first is not None:
-                    idx, steering_value = map_to_steering(first, maincam_device.angle_min, maincam_device.angle_max, maincam_device.steering_values)
+                    idx, steering_value = map_to_steering(first, maincam_device.angle_min, maincam_device.angle_max,
+                                                          maincam_device.steering_values)
                     if maincam_device.save_statistics:
                         maincam_device.statistics_list.append([idx, steering_value])
                     if maincam_device.capture:
@@ -1097,7 +1123,8 @@ def maincam_task():
                         else:
                             arduino_device.current_steering = steering_value
                 elif second is not None:
-                    idx, steering_value = map_to_steering(second, maincam_device.angle_min, maincam_device.angle_max, maincam_device.steering_values)
+                    idx, steering_value = map_to_steering(second, maincam_device.angle_min, maincam_device.angle_max,
+                                                          maincam_device.steering_values)
                     if maincam_device.save_statistics:
                         maincam_device.statistics_list.append([idx, steering_value])
                     if maincam_device.capture:
@@ -1106,7 +1133,8 @@ def maincam_task():
                         else:
                             arduino_device.current_steering = steering_value
                 if maincam_device.verbose:
-                    drawed_img = put_message(drawed_img, 3, [f'rl_ang : {line1_ang}', f'll_ang : {line2_ang}', f'steer : {steering_value}'])
+                    drawed_img = put_message(drawed_img, 3, [f'rl_ang : {line1_ang}', f'll_ang : {line2_ang}',
+                                                             f'steer : {steering_value}'])
                 # if maincam_device.record:
                 #     maincam_device.writer_orig.write(frame)
                 #     maincam_device.writer_inferenced.write(drawed_img)
