@@ -799,8 +799,8 @@ class MyApp(QWidget):
                 subcam_device.avoid_state = False
                 subcam_device.traffic_state = False
                 subcam_device.cross_state = False
-                arduino_device.current_speed = 255
-                time.sleep(6)  # 첫 장애물로 인한 대기 시간 + 0.8
+                arduino_device.current_speed = 150
+                time.sleep(10.2)  # 첫 장애물로 인한 대기 시간 + 0.8
 
                 # [ STEP 2 ]
                 turn_left() # -1.2
@@ -998,10 +998,10 @@ def turn_left():
     '''
     maincam_device.capture = False
     time.sleep(0.1)  # originally, 0.05
-    arduino_device.current_steering = 3
-    time.sleep(1.2)
+    arduino_device.current_steering = 0
+    time.sleep(2.04)
     arduino_device.current_steering = 20
-    time.sleep(0.3)
+    time.sleep(0.51)
     arduino_device.current_steering = 10
     maincam_device.line_name = 'llline'
     maincam_device.capture = True
@@ -1012,13 +1012,13 @@ def turn_right(car_bias=0):
     우측차선으로 갈아탈 때 사용하는 함수
     메인 카메라 끔 -> 우측 스티어링 0.7s -> line_name 변경 -> 메인 카메라 켬
     '''
-    CAR_BIAS_PARAM = 0.005000
+    CAR_BIAS_PARAM = 0.005000 * 1.7
     maincam_device.capture = False
     time.sleep(0.1)  # originally, 0.05
     arduino_device.current_steering = 20
-    time.sleep(0.6 - (car_bias * CAR_BIAS_PARAM))
+    time.sleep(0.6 * 1.7 - (car_bias * CAR_BIAS_PARAM))
     arduino_device.current_steering = 0
-    time.sleep(0.5 - (car_bias * CAR_BIAS_PARAM))
+    time.sleep(0.5 * 1.7 - (car_bias * CAR_BIAS_PARAM))
     arduino_device.current_steering = 10
     maincam_device.line_name = 'rrline'
     maincam_device.capture = True
@@ -1113,6 +1113,7 @@ def subcam_task():
                             arduino_device.current_speed = -50
                             subcam_device.cross_state = False
                             subcam_device.traffic_state = True
+                            break
                         print(cross_walk_upline)
                         #if cross_walk_width * cross_walk_height > 41000:  # 여기에 판단문 만들어주기
                         #    arduino_device.current_speed = 0
@@ -1184,11 +1185,11 @@ def subcam_task():
                                 subcam_device.avoid_state = False
                                 car_bias = 350 - averagex
                                 turn_right(car_bias=car_bias)
-                                time.sleep(1)
                                 arduino_device.current_speed = 150
                                 # maincam_device.angle_max = int(maincam_device.angle_max * 0.95)
                                 # maincam_device.angle_min = int(maincam_device.angle_min * 0.95)
                                 #subcam_device.traffic_state = True
+                                time.sleep(3)
                                 subcam_device.cross_state = True
                                 break
 
