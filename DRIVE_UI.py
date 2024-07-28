@@ -26,19 +26,22 @@ subcam_device, maincam_device, lidar_device, main_ui = None, None, None, None
 class subcam():
     def __init__(self):
         self.cap = None
-        self.model = YOLO('./models/yolov8m-sub-ep200-unf-d2.pt', task='detect')
-        self.model.to('mps')
+        self.model_car = YOLO('./models/yolov10x.pt', task='detect')
+        self.model_traffic = YOLO('./models/yolov8m-sub-ep200-frz-d2.pt', task='detect')
+        self.model_car.to('mps')
+        self.model_traffic.to('mps')
         self.record = False
         self.writer_orig = None
         self.writer_inferenced = None
         self.update_img = np.zeros((360, 640, 3), dtype=np.uint8)
         self.steering_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
         self.fps = 5.0
-        self.capture = False
+        self.capture = True
         self.avoid_state = False
         self.cross_state = False
         self.traffic_state = False
-        self.model(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.2)
+        self.model_car(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.2)
+        self.model_traffic(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.2)
         self.found_num = 0
 
     def start_camera(self, device_index):
@@ -233,8 +236,8 @@ class lidar():
         self.turn_angle = 0.0
 
         self.BACK_PARAM_1 = 0.015
-        self.BACK_PARAM_2 = 0.015
-        self.BACK_PARAM_3 = 0.015
+        self.BACK_PARAM_2 = 0.014
+        self.BACK_PARAM_3 = 0.016
         self.STEP3_DISTANCE_OFFSET = 1000
         self.STEP3_BACK_PARAM = 0.005
 
@@ -318,7 +321,7 @@ def parking():
         if lidar_device.parking_step == 1:
             # 1단계. 직진하면서 차량 두대 발견 -> 비틀림 각도 산출
             arduino_device.current_speed = 80
-            arduino_device.current_steering = 11
+            arduino_device.current_steering = 10
             if len(lidar_device.scan_data) < 10:
                 time.sleep(0.1)
                 continue
@@ -386,6 +389,8 @@ def parking():
                 # 이부분 알고리즘 수정 필요
                 if distance > 1000:
                     time.sleep((distance - lidar_device.STEP3_DISTANCE_OFFSET) * lidar_device.STEP3_BACK_PARAM)
+                else:
+                    time.sleep(1.5)
                 arduino_device.current_speed = 0
                 time.sleep(3)
                 lidar_device.parking_step += 1
@@ -394,7 +399,7 @@ def parking():
             arduino_device.current_speed = 100
             time.sleep(1)
             arduino_device.current_steering = 20
-            time.sleep(6.2)
+            time.sleep(5.7)
             arduino_device.current_steering = 10
             time.sleep(10)
             arduino_device.current_speed = 0
@@ -795,13 +800,13 @@ class MyApp(QWidget):
                 subcam_device.traffic_state = False
                 subcam_device.cross_state = False
                 arduino_device.current_speed = 255
-                time.sleep(5.5)  # 첫 장애물로 인한 대기 시간
+                time.sleep(6)  # 첫 장애물로 인한 대기 시간 + 0.8
 
                 # [ STEP 2 ]
-                turn_left()
+                turn_left() # -1.2
 
                 # [ STEP 3 ]
-                time.sleep(1.5)  # 이 부분 회피에서 수정해야할수도
+                time.sleep(1.9)  # 세번째 차량 찾기 시작하는 시간. 돌다가 주차된 차들을 찾거나, 너무 빨리 찾거나, 너무 늦게 찾을시 이 시간 수정도 고려
                 subcam_device.capture = True
                 subcam_device.avoid_state = True
             else:
@@ -811,6 +816,7 @@ class MyApp(QWidget):
                 subcam_device.traffic_state = False
                 subcam_device.cross_state = False
                 maincam_device.line_name = 'rrline'
+
                 self.slow_stop()
         elif self.checkbox_park.isChecked():
             if not self.driving_state:
@@ -992,45 +998,119 @@ def turn_left():
     '''
     maincam_device.capture = False
     time.sleep(0.1)  # originally, 0.05
-    arduino_device.current_steering = 0
-    time.sleep(0.85)
+    arduino_device.current_steering = 3
+    time.sleep(1.2)
+    arduino_device.current_steering = 20
+    time.sleep(0.3)
     arduino_device.current_steering = 10
     maincam_device.line_name = 'llline'
     maincam_device.capture = True
 
 
-def turn_right():
+def turn_right(car_bias=0):
     '''
     우측차선으로 갈아탈 때 사용하는 함수
     메인 카메라 끔 -> 우측 스티어링 0.7s -> line_name 변경 -> 메인 카메라 켬
     '''
+    CAR_BIAS_PARAM = 0.005000
     maincam_device.capture = False
     time.sleep(0.1)  # originally, 0.05
     arduino_device.current_steering = 20
-    time.sleep(0.75)
+    time.sleep(0.6 - (car_bias * CAR_BIAS_PARAM))
+    arduino_device.current_steering = 0
+    time.sleep(0.5 - (car_bias * CAR_BIAS_PARAM))
     arduino_device.current_steering = 10
     maincam_device.line_name = 'rrline'
     maincam_device.capture = True
+    time.sleep(0.1)
 
+
+def sign_brightness(area):
+    h, w, c = area.shape
+    width_offset = int(w * 0.15 / 3)
+    red_box = area[
+              int(h * (1 / 3)):int(h * (2 / 3)),
+              0 + width_offset : int(w * 1 / 3 - width_offset)]
+
+    yellow_box = area[
+                 int(h * (1 / 3)):int(h * (2 / 3)),
+                 int(w * 1 / 3) + width_offset:int(w * 2 / 3) - width_offset]
+    green_box = area[
+                int(h * (1 / 3)):int(h * (2 / 3)),
+                int(w * 2 / 3) + width_offset:w - width_offset]
+    red_hsv = cv2.cvtColor(red_box, cv2.COLOR_BGR2HSV)
+    yellow_hsv = cv2.cvtColor(yellow_box, cv2.COLOR_BGR2HSV)
+    green_hsv = cv2.cvtColor(green_box, cv2.COLOR_BGR2HSV)
+
+    red_h = np.average(red_hsv[:, :, 0])
+    yellow_h = np.average(yellow_hsv[:, :, 0])
+    green_h = np.average(green_hsv[:, :, 0])
+
+    red_s = np.average(red_hsv[:, :, 1])
+    yellow_s = np.average(yellow_hsv[:, :, 1])
+    green_s = np.average(green_hsv[:, :, 1])
+    red_v = np.average(red_hsv[:, :, 2])
+    yellow_v = np.average(yellow_hsv[:, :, 2])
+    green_v = np.average(green_hsv[:, :, 2])
+
+    print(f'red_h_value : {red_h}')
+    print(f'yellow_h_avg : {yellow_h}')
+    print(f'green_h_avg : {green_h}')
+
+    print(f'red_s_value : {red_s}')
+    print(f'yellow_s_avg : {yellow_s}')
+    print(f'green_s_avg : {green_s}')
+
+    print(f'red_v_value : {red_v}')
+    print(f'yellow_v_avg : {yellow_v}')
+    print(f'green_v_avg : {green_v}')
+    return [[red_h, red_s, red_v], [yellow_h, yellow_s, yellow_v], [green_h, green_s, green_v]]
 
 def subcam_task():
     if subcam_device.cap is not None:
         ret, frame = subcam_device.cap.read()
+        # subcam_device.capture = True
         if ret:
             t1 = time.time_ns()
-            results = subcam_device.model(frame, device='mps', conf=0.6, verbose=False)
+            # if subcam_device.traffic_state or subcam_device.cross_state:
+            #     results = subcam_device.model_traffic(frame, device='mps', conf=0.6, verbose=False)
+            # else:
+            #     results = subcam_device.model_car(frame, device='mps', conf=0.2, verbose=False)
+
+
+            if subcam_device.avoid_state:
+                results = subcam_device.model_car(frame, device='mps', conf=0.2, verbose=False)
+            else:
+                results = subcam_device.model_traffic(frame, device='mps', conf=0.4, verbose=False)
             subcam_device.update_img = results[0].plot()
             if subcam_device.capture:
                 for idx, box in enumerate(results[0].boxes):
+                    if int(box.cls) == 7:
+                        car_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
+                        car_width = int(box.xyxy[0][2] - box.xyxy[0][0])
+                        averagex = int((box.xyxy[0][0] + box.xyxy[0][2]) / 2)
+                        print(f'truck, size : {car_size}, width : {car_width}, averagex : {averagex}')
+                    if int(box.cls) == 2:
+                        car_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
+                        car_width = int(box.xyxy[0][2] - box.xyxy[0][0])
+                        averagex = int((box.xyxy[0][0] + box.xyxy[0][2]) / 2)
+                        print(f'car, size : {car_size}, width : {car_width}, averagex : {averagex}')
+                    if int(box.cls) == 3:
+                        car_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
+                        car_width = int(box.xyxy[0][2] - box.xyxy[0][0])
+                        averagex = int((box.xyxy[0][0] + box.xyxy[0][2]) / 2)
+                        print(f'motorcycle, size : {car_size}, width : {car_width}, averagex : {averagex}')
                     if int(box.cls) == 2 and subcam_device.cross_state:
                         cross_walk_width = int(box.xyxy[0][2] - box.xyxy[0][0])
                         cross_walk_height = int(box.xyxy[0][3] - box.xyxy[0][1])
                         cross_walk_upline = int(box.xyxy[0][1])
+                        print(cross_walk_upline)
 
                         # box 좌표로 판단하는 기준 만들고, 그 기준 넘어가면 멈춤 -> cross_state = False, traffic_state = True
-                        if int(cross_walk_upline) > 294:
+                        if int(cross_walk_upline) > 280:        #original:294
                             arduino_device.current_speed = 0
-
+                            time.sleep(0.5)
+                            arduino_device.current_speed = -50
                             subcam_device.cross_state = False
                             subcam_device.traffic_state = True
                         print(cross_walk_upline)
@@ -1039,7 +1119,6 @@ def subcam_task():
                         #    subcam_device.cross_state = False
                         #    subcam_device.traffic_state = True
 
-
                     if int(box.cls) == 1 and subcam_device.traffic_state:
                         traffic_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
                         traffic_point_y = int(box.xyxy[0][3] + box.xyxy[0][1]) // 2
@@ -1047,35 +1126,68 @@ def subcam_task():
                         traffic_r_x = int(box.xyxy[0][0]) + int(traffic_width // 6)
                         traffic_y_x = int(box.xyxy[0][0]) + int(3 * traffic_width // 6)
                         traffic_g_x = int(box.xyxy[0][0]) + int(5 * traffic_width // 6)
-                        print("[find traffic sign]")
                         print(f"R : {[frame[traffic_point_y][traffic_r_x]]}")
                         print(f"Y : {[frame[traffic_point_y][traffic_y_x]]}")
                         print(f"G : {[frame[traffic_point_y][traffic_g_x]]}")
                         color_green = [frame[traffic_point_y][traffic_g_x]]
-                        if traffic_size > 100:
+                        if traffic_size > 10000:
+                            print("[find traffic sign]", traffic_size)
+                            cv2.imwrite('./traffic_sign.jpg', results[0].plot())
                             arduino_device.current_speed = 0
-                            green_color = int(
-                                int(color_green[0][0]) + int(color_green[0][1]) + int(color_green[0][2])) // 3
-                            print(green_color)
-                            if green_color > 230:
+
+                            # green_color = int(
+                            #     int(color_green[0][0]) + int(color_green[0][1]) + int(color_green[0][2])) // 3
+                            # print(green_color)
+                            # if green_color > 250:
+                            #     arduino_device.current_speed = 150
+                            #     subcam_device.traffic_state = False
+                            # else:
+                            #     arduino_device.current_speed = 0
+
+                            traffic_hsv = sign_brightness(frame[int(box.xyxy[0][1]):int(box.xyxy[0][3]), int(box.xyxy[0][0]):int(box.xyxy[0][2])])
+                            if traffic_hsv[2][2] > 200 and abs(traffic_hsv[2][2] - traffic_hsv[0][2]) > 30 and abs(traffic_hsv[2][2] - traffic_hsv[1][2]) > 30:
                                 arduino_device.current_speed = 150
                                 subcam_device.traffic_state = False
-                            else:
-                                arduino_device.current_speed = 0
 
-                    if int(box.cls) == 0 and subcam_device.avoid_state:
+
+                    # 혜경_trycode
+                    # if subcam_device.avoid_state:
+                    #     print("혜경")
+                    #     maincam_device.capture = True
+                    #     subcam_device.capture = False
+                    #     time.sleep(1.4)  # 첫 장애물로 인한 대기 시간
+                    #     turn_right()
+                    #     time.sleep(1)
+                    #     arduino_device.current_speed = 150
+                    #     maincam_device.angle_max = int(maincam_device.angle_max * 0.95)
+                    #     maincam_device.angle_min = int(maincam_device.angle_min * 0.95)
+                    #     subcam_device.capture = True
+                    #     subcam_device.avoid_state = False
+                    #     subcam_device.traffic_state = False
+                    #     subcam_device.cross_state = True
+                    #     break
+                    # if int(box.cls) == 0 and subcam_device.avoid_state:
+                    if (int(box.cls) == 7 or int(box.cls) == 2 or int(box.cls) == 28 or int(box.cls) == 3) and subcam_device.avoid_state: # cls : truck, car, motorcycle
                         car_size = int(box.xyxy[0][2] - box.xyxy[0][0]) * int(box.xyxy[0][3] - box.xyxy[0][1])
-                        print(f'car_size : {car_size}')
-                        if car_size > 6000:  # originally, 6000
+                        car_width = int(box.xyxy[0][2] - box.xyxy[0][0])
+                        print(f'car_size : {car_size}, car_width : {car_width}')
+                        # if int(box.cls) == 2 or int(box.cls) == 3:
+                        #     test_size = 6000
+                        # elif int(box.cls) == 7 or int(box.cls) == 28:
+                        #     test_size = 7000
+                        test_size = 100
+                        if car_width > test_size:  # originally, 6000, car_width로 해서도 적절한값 찾아보기(대략 70~100 부근 예상)
                             averagex = int((box.xyxy[0][0] + box.xyxy[0][2]) / 2)
                             # 중심점이 왼쪽이면 무시, 가운데쯤 있으면 회피기동
-                            if 220 <= averagex <= 480:
+                            print(averagex)
+                            if 250 <= averagex <= 400:
                                 subcam_device.avoid_state = False
-                                turn_right()
-                                time.sleep(3)
+                                car_bias = 350 - averagex
+                                turn_right(car_bias=car_bias)
+                                time.sleep(1)
                                 arduino_device.current_speed = 150
-                                maincam_device.angle_max = int(maincam_device.angle_max * 0.95)
-                                maincam_device.angle_min = int(maincam_device.angle_min * 0.95)
+                                # maincam_device.angle_max = int(maincam_device.angle_max * 0.95)
+                                # maincam_device.angle_min = int(maincam_device.angle_min * 0.95)
                                 #subcam_device.traffic_state = True
                                 subcam_device.cross_state = True
                                 break
@@ -1093,32 +1205,44 @@ def subcam_task():
         subcam_timer.start()
 
 
+
+
 def maincam_task():
     if maincam_device.cap is not None:
         ret, frame = maincam_device.cap.read()
         if ret:
             try:
                 t1 = time.time_ns()
+                if maincam_device.line_name == 'llline':
+                    conf = 0.6
+                else:
+                    conf = 0.2
                 img_inferenced, drawed_img, line1_ang, line2_ang, mid_bias = inf_angle_mainline(maincam_device.model,
                                                                                                 frame,
                                                                                                 maincam_device.SAMPLING_RATE,
                                                                                                 maincam_device.bev_width_offset,
                                                                                                 maincam_device.bev_height_offset,
                                                                                                 maincam_device.line_name,
-                                                                                                maincam_device.poly_degree)
+                                                                                                maincam_device.poly_degree,
+                                                                                                True,
+                                                                                                conf)
                 steering_value = 9999.0
                 first = line1_ang
                 second = line2_ang
-                if maincam_device.line_name == 'llline':
-                    first = line2_ang
-                    second = line1_ang
+                # if maincam_device.line_name == 'llline':
+                #     if subcam_device.avoid_state:
+                #         first = line1_ang
+                #         second = line2_ang
+                #     else:
+                #         first = line2_ang
+                #         second = line1_ang
                 if first is not None:
                     idx, steering_value = map_to_steering(first, maincam_device.angle_min, maincam_device.angle_max,
                                                           maincam_device.steering_values)
                     if maincam_device.save_statistics:
                         maincam_device.statistics_list.append([idx, steering_value])
                     if maincam_device.capture:
-                        if mid_bias is not None:
+                        if (mid_bias is not None)and (not (maincam_device.line_name == 'llline')):
                             arduino_device.current_steering = steering_value + int(mid_bias)
                         else:
                             arduino_device.current_steering = steering_value
@@ -1128,7 +1252,7 @@ def maincam_task():
                     if maincam_device.save_statistics:
                         maincam_device.statistics_list.append([idx, steering_value])
                     if maincam_device.capture:
-                        if mid_bias is not None:
+                        if (mid_bias is not None) and (not (maincam_device.line_name == 'llline')):
                             arduino_device.current_steering = steering_value + int(mid_bias)
                         else:
                             arduino_device.current_steering = steering_value
