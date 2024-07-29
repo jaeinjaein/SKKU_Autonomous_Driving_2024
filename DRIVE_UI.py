@@ -17,7 +17,7 @@ from rplidar import RPLidar
 import math
 import os
 import json
-from lidar_process import lidar_analyze
+from lidar_process import find_right_car, find_side_car_angle
 
 ard_list = []
 subcam_device, maincam_device, lidar_device, main_ui = None, None, None, None
@@ -325,7 +325,7 @@ def parking():
             if len(lidar_device.scan_data) < 10:
                 time.sleep(0.1)
                 continue
-            distance, lidar_car = lidar_analyze(lidar_device.scan_data)  # 여기 car detect 함수 만들어서, 우측 차량과 거리 검출
+            distance, lidar_car = find_right_car(lidar_device.scan_data)  # 여기 car detect 함수 만들어서, 우측 차량과 거리 검출
             if lidar_car is not None:
                 if lidar_device.car_a is None:
                     lidar_device.car_a_dist, lidar_device.car_a = distance, lidar_car
@@ -369,7 +369,7 @@ def parking():
             time.sleep(1)
         elif lidar_device.parking_step == 3:
             arduino_device.current_speed = 50
-            distance, lidar_car = lidar_analyze(lidar_device.scan_data)  # 다시 우측 차량 찾도록
+            distance, lidar_car = find_right_car(lidar_device.scan_data)  # 다시 우측 차량 찾도록
             if lidar_car is not None:  # 우측 차량 감지 --> 차량 멈추고, 거리에 따라 다음 행동 결정
                 print(f'[STEP 3] Car Detected : distance is {distance}mm')
                 arduino_device.current_speed = 0
@@ -387,10 +387,19 @@ def parking():
                 arduino_device.current_speed = -50
                 time.sleep(2)
                 # 이부분 알고리즘 수정 필요
+
+                # find_side_car_angle(lidar_device.scan_data)를 통한 angle 찾고, 0.1초마다 이거를 통해 current_steering에 더해줘서 옮기는 알고리즘
+                back_time = 0.0
                 if distance > 1000:
-                    time.sleep((distance - lidar_device.STEP3_DISTANCE_OFFSET) * lidar_device.STEP3_BACK_PARAM)
+                    back_time = (distance - lidar_device.STEP3_DISTANCE_OFFSET) * lidar_device.STEP3_BACK_PARAM
                 else:
-                    time.sleep(1.5)
+                    back_time = 1.5
+                for _ in range(int(back_time / 0.1)):
+                    cav_angle = find_side_car_angle(lidar_device.scan_data)
+                    # cav_angle < 0 -> 우회전(+)
+                    arduino_device.current_steering = 10 + int(-1 * cav_angle / 5)
+                    time.sleep(0.1)
+                # time.sleep(back_time)
                 arduino_device.current_speed = 0
                 time.sleep(3)
                 lidar_device.parking_step += 1

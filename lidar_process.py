@@ -146,15 +146,15 @@ def find_side_car(points, for_visualize=False):
     '''
     y_coords = points[:, 2]
     car_pos = -1
-    if np.all(y_coords < 0):  #
+    if np.all(y_coords < 0):  # 좌측차
         car_pos = 0
-    elif np.all(y_coords > 0):
+    elif np.all(y_coords > 0):  # 우측차
         car_pos = 1
     else:
-        return None, None
+        return None, None, None
     object_width = calculate_x_difference(points)
     if not object_width > 300:
-        return None, None
+        return None, None, None
     points_sorted = sorted(points, key=lambda p:p[1])
     angle_list = []
     for idx, point in enumerate(points_sorted[:-1]):
@@ -162,20 +162,17 @@ def find_side_car(points, for_visualize=False):
         if angle is not None:
             angle_list.append(angle)
     if len(angle_list) < 20:
-        return None, None
+        return None, None, None
     var_list = []
     for i in range(5):
         var_list.append(np.var(angle_list[int(len(angle_list) * 0.2 * (i)):int(len(angle_list) * 0.2 * (i+1))]))
     idx = np.argmin(np.abs(np.array(var_list)))
     avg_angle = np.average(angle_list[int(len(angle_list) * 0.2 * idx):int(len(angle_list) * 0.2 * (idx + 1))])
     result_points = points_sorted[int(len(angle_list)*0.2*idx):int(len(angle_list)*0.2*(idx+1))]
-    print(f'car_pos : {car_pos}, angle : {avg_angle}')
-    if for_visualize:
-        return car_pos, result_points
-    else:
-        return car_pos, avg_angle
+    #print(f'car_pos : {car_pos}, angle : {avg_angle}')
+    return car_pos, avg_angle, result_points
 
-def lidar_analyze_test(scan, img=None):
+def find_side_car_angle(scan, img=None):
     global current_scan, current_result
     if img is not None:
         cv2.circle(img, (int(window_width / 2), int(window_height / 2)), int(window_height / 2),
@@ -192,22 +189,40 @@ def lidar_analyze_test(scan, img=None):
         ptr_set_list.append(current_scan[np.array(current_result)])
         current_scan = np.delete(current_scan, np.array(current_result), axis=0)
         current_result = []
+    side_car_list = []
     for ptr_set in ptr_set_list:
         if len(ptr_set) < 5:
             continue
         # color = random_colors[random.randint(0, 5)]
         # distance, car_y_tf = is_car_y(ptr_set)
         # x_diff = calculate_x_difference(ptr_set)
-        car_pos, car_object = find_side_car(ptr_set, True)
-        if car_object is not None:
-            for ptr in car_object:
-                x, y = int(ptr[1]), int(ptr[2])
-                x = int(window_width / 2 + x * scale)
-                y = int(window_height / 2 - y * scale)
-                cv2.circle(img, (x, y), 2, (255,255,255), -1)
+        car_pos, car_angle, car_points = find_side_car(ptr_set, True)
+        if car_points is not None:
+            if img is not None:
+                for ptr in car_points:
+                    x, y = int(ptr[1]), int(ptr[2])
+                    x = int(window_width / 2 + x * scale)
+                    y = int(window_height / 2 - y * scale)
+                    cv2.circle(img, (x, y), 2, (255,255,255), -1)
+            side_car_list.append((car_pos, car_angle))
+    result_angle = -1
+    if len(side_car_list) > 0:
+        if len(side_car_list) == 1:
+            result_angle = side_car_list[0][1]
+        elif len(side_car_list) == 2:
+            result_angle = (side_car_list[0][1] + side_car_list[1][1]) / 2.0
+        print(f'side_car_num : {len(side_car_list)}, result_angle : {result_angle}')
+        return result_angle
+    else:
+        return None
 
 
-def lidar_analyze(scan, img=None):
+
+
+
+
+
+def find_right_car(scan, img=None):
     global current_scan, current_result
     if img is not None:
         cv2.circle(img, (int(window_width / 2), int(window_height / 2)), int(window_height / 2),
@@ -248,7 +263,7 @@ if __name__ == '__main__':
         lidar_datas= json.load(f)
         for scan in lidar_datas:
             img = np.zeros((window_height, window_width, 3), np.uint8)
-            lidar_analyze_test(scan, img=img)
+            find_side_car_angle(scan, img=img)
 
         # print(len(ptr_set_list))
         # print(len(ptr_set_list))
