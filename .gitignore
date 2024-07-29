@@ -17,5 +17,5 @@ venv/
 runs/
 records/
 dataset_generator/
-*.json
 parking_code/
+test_video*

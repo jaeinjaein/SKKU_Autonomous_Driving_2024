@@ -799,14 +799,14 @@ class MyApp(QWidget):
                 subcam_device.avoid_state = False
                 subcam_device.traffic_state = False
                 subcam_device.cross_state = False
-                arduino_device.current_speed = 150
-                time.sleep(10.2)  # 첫 장애물로 인한 대기 시간 + 0.8
+                arduino_device.current_speed = 200
+                time.sleep(9 * .75)  # 첫 장애물로 인한 대기 시간 + 0.8
 
                 # [ STEP 2 ]
                 turn_left() # -1.2
 
                 # [ STEP 3 ]
-                time.sleep(1.9)  # 세번째 차량 찾기 시작하는 시간. 돌다가 주차된 차들을 찾거나, 너무 빨리 찾거나, 너무 늦게 찾을시 이 시간 수정도 고려
+                time.sleep(1.5 * .75)  # 세번째 차량 찾기 시작하는 시간. 돌다가 주차된 차들을 찾거나, 너무 빨리 찾거나, 너무 늦게 찾을시 이 시간 수정도 고려
                 subcam_device.capture = True
                 subcam_device.avoid_state = True
             else:
@@ -999,9 +999,9 @@ def turn_left():
     maincam_device.capture = False
     time.sleep(0.1)  # originally, 0.05
     arduino_device.current_steering = 0
-    time.sleep(2.04)
-    arduino_device.current_steering = 20
-    time.sleep(0.51)
+    time.sleep(1.7 * .75)
+    arduino_device.current_steering = 17
+    time.sleep(0.81 * .75)
     arduino_device.current_steering = 10
     maincam_device.line_name = 'llline'
     maincam_device.capture = True
@@ -1012,14 +1012,13 @@ def turn_right(car_bias=0):
     우측차선으로 갈아탈 때 사용하는 함수
     메인 카메라 끔 -> 우측 스티어링 0.7s -> line_name 변경 -> 메인 카메라 켬
     '''
-    CAR_BIAS_PARAM = 0.005000 * 1.7
+    CAR_BIAS_PARAM = 0.003333 * 1.7
     maincam_device.capture = False
     time.sleep(0.1)  # originally, 0.05
-    arduino_device.current_steering = 20
-    time.sleep(0.6 * 1.7 - (car_bias * CAR_BIAS_PARAM))
+    arduino_device.current_steering = 18
+    time.sleep(1.2)
     arduino_device.current_steering = 0
-    time.sleep(0.5 * 1.7 - (car_bias * CAR_BIAS_PARAM))
-    arduino_device.current_steering = 10
+    time.sleep(1)
     maincam_device.line_name = 'rrline'
     maincam_device.capture = True
     time.sleep(0.1)
@@ -1134,6 +1133,7 @@ def subcam_task():
                         if traffic_size > 10000:
                             print("[find traffic sign]", traffic_size)
                             cv2.imwrite('./traffic_sign.jpg', results[0].plot())
+                            time.sleep(0.5)
                             arduino_device.current_speed = 0
 
                             # green_color = int(
@@ -1176,7 +1176,7 @@ def subcam_task():
                         #     test_size = 6000
                         # elif int(box.cls) == 7 or int(box.cls) == 28:
                         #     test_size = 7000
-                        test_size = 100
+                        test_size = 130
                         if car_width > test_size:  # originally, 6000, car_width로 해서도 적절한값 찾아보기(대략 70~100 부근 예상)
                             averagex = int((box.xyxy[0][0] + box.xyxy[0][2]) / 2)
                             # 중심점이 왼쪽이면 무시, 가운데쯤 있으면 회피기동
@@ -1243,7 +1243,7 @@ def maincam_task():
                     if maincam_device.save_statistics:
                         maincam_device.statistics_list.append([idx, steering_value])
                     if maincam_device.capture:
-                        if (mid_bias is not None)and (not (maincam_device.line_name == 'llline')):
+                        if (mid_bias is not None):#and (not (maincam_device.line_name == 'llline')):
                             arduino_device.current_steering = steering_value + int(mid_bias)
                         else:
                             arduino_device.current_steering = steering_value
@@ -1253,7 +1253,7 @@ def maincam_task():
                     if maincam_device.save_statistics:
                         maincam_device.statistics_list.append([idx, steering_value])
                     if maincam_device.capture:
-                        if (mid_bias is not None) and (not (maincam_device.line_name == 'llline')):
+                        if (mid_bias is not None):# and (not (maincam_device.line_name == 'llline')):
                             arduino_device.current_steering = steering_value + int(mid_bias)
                         else:
                             arduino_device.current_steering = steering_value

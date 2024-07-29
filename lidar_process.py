@@ -5,6 +5,7 @@ import numpy as np
 #from parking_code.LiDAR_util import *
 from math import sin, cos, pi, pow, sqrt, atan
 import random
+import matplotlib.pyplot as plt
 
 
 current_scan = None     # 스캔중인 프레임의 실시간 점들
@@ -16,7 +17,7 @@ window_height = 360
 max_distance = 2500
 min_distance = 50
 min_angle = 0
-max_angle = 180
+max_angle = 360
 scale = window_width / (2 * max_distance)  # 360 / (2 * 2500) = 720 / 10000 = 0.072
 
 
@@ -121,6 +122,91 @@ def is_car_y(points):
     return y_distance, ((abs(int(min_y_point[1])) < 50) and (y_distance > 500))
 
 
+def get_angle(point_a, point_b):
+    x_diff = float(point_b[1] - point_a[1])
+    y_diff = float(point_b[2] - point_a[2])
+    try:
+        return atan(y_diff / x_diff) * 180 / pi
+    except ZeroDivisionError:
+        return None
+
+
+def find_side_car(points, for_visualize=False):
+    '''
+    차량의 옆면을 찾고, 분산을 통해 일자인 부분을 추출하는 함수
+    조건 1) 모든 y좌표가 0보다 크거나, 모든 y좌표가 0보다 작다
+    조건 2) 판단된 점들의 너비가 500mm 이상이다.
+    조건 3) 좌측부터 연속된 점들의 각도를 20개 이상 추출 가능하여야 한다. (구분 가능한 점이 21개 이상)
+    위 3개의 조건을 만족하면, 점들을 좌측부터 갯수 기준 5개 set로 분할하고, set마다의 기울기 분산을 구한다.
+    기울기 분산이 총 4개라면(=기울기 값이 20개), 가장 작은 분산을 가진 기울기의 평균을 구한다. (avg_angle)
+    위 함수는 Step 3에서 뒤로 들어갈 때 두 차의 기울기 평균을 구하고, 각도에 따라서 조향각을 줄 것이다.
+    0에 가까울수록, 차가 수평으로 잘 들어가고 있음을 의미한다.
+    마이너스 --> 우측/좌측 조향 (실제로 구해봐야함)
+    플러스 --> 좌측/우측 조향 (실제로 해봐야함)
+    '''
+    y_coords = points[:, 2]
+    car_pos = -1
+    if np.all(y_coords < 0):  #
+        car_pos = 0
+    elif np.all(y_coords > 0):
+        car_pos = 1
+    else:
+        return None, None
+    object_width = calculate_x_difference(points)
+    if not object_width > 300:
+        return None, None
+    points_sorted = sorted(points, key=lambda p:p[1])
+    angle_list = []
+    for idx, point in enumerate(points_sorted[:-1]):
+        angle = get_angle(points_sorted[idx], points_sorted[idx + 1])
+        if angle is not None:
+            angle_list.append(angle)
+    if len(angle_list) < 20:
+        return None, None
+    var_list = []
+    for i in range(5):
+        var_list.append(np.var(angle_list[int(len(angle_list) * 0.2 * (i)):int(len(angle_list) * 0.2 * (i+1))]))
+    idx = np.argmin(np.abs(np.array(var_list)))
+    avg_angle = np.average(angle_list[int(len(angle_list) * 0.2 * idx):int(len(angle_list) * 0.2 * (idx + 1))])
+    result_points = points_sorted[int(len(angle_list)*0.2*idx):int(len(angle_list)*0.2*(idx+1))]
+    print(f'car_pos : {car_pos}, angle : {avg_angle}')
+    if for_visualize:
+        return car_pos, result_points
+    else:
+        return car_pos, avg_angle
+
+def lidar_analyze_test(scan, img=None):
+    global current_scan, current_result
+    if img is not None:
+        cv2.circle(img, (int(window_width / 2), int(window_height / 2)), int(window_height / 2),
+                   (255, 255, 255), 1)
+    # print(scan)
+    scan_cut = getDistanceRange(scan, min_distance, max_distance)
+    scan_cut = getAngleRange(scan_cut, min_angle, max_angle)
+    cartesian_points = polar_to_cartesian(scan_cut)
+    # print(cartesian_points)
+    ptr_set_list = []
+    current_scan = cartesian_points
+    while len(current_scan) > 0:
+        recursive_find(to_remove_list=[0], term=120)
+        ptr_set_list.append(current_scan[np.array(current_result)])
+        current_scan = np.delete(current_scan, np.array(current_result), axis=0)
+        current_result = []
+    for ptr_set in ptr_set_list:
+        if len(ptr_set) < 5:
+            continue
+        # color = random_colors[random.randint(0, 5)]
+        # distance, car_y_tf = is_car_y(ptr_set)
+        # x_diff = calculate_x_difference(ptr_set)
+        car_pos, car_object = find_side_car(ptr_set, True)
+        if car_object is not None:
+            for ptr in car_object:
+                x, y = int(ptr[1]), int(ptr[2])
+                x = int(window_width / 2 + x * scale)
+                y = int(window_height / 2 - y * scale)
+                cv2.circle(img, (x, y), 2, (255,255,255), -1)
+
+
 def lidar_analyze(scan, img=None):
     global current_scan, current_result
     if img is not None:
@@ -142,8 +228,9 @@ def lidar_analyze(scan, img=None):
         if len(ptr_set) < 5:
             continue
         # color = random_colors[random.randint(0, 5)]
-        x_diff = calculate_x_difference(ptr_set)
         distance, car_y_tf = is_car_y(ptr_set)
+        x_diff = calculate_x_difference(ptr_set)
+
         if x_diff > 200 and car_y_tf:
             for ptr in ptr_set:
                 x, y = int(ptr[1]), int(ptr[2])
@@ -157,13 +244,13 @@ def lidar_analyze(scan, img=None):
 
 if __name__ == '__main__':
     random_colors = [(255, 255, 0), (255, 0, 255), (0, 255, 255), (255, 0, 0), (0, 255, 0), (0, 0, 255)]
-    with open('./lidar_data.json', 'r') as f:
+    with open('./2024-07-28-194218_lidar.json', 'r') as f:
         lidar_datas= json.load(f)
         for scan in lidar_datas:
             img = np.zeros((window_height, window_width, 3), np.uint8)
-            lidar_analyze(scan, img=img)
+            lidar_analyze_test(scan, img=img)
 
         # print(len(ptr_set_list))
         # print(len(ptr_set_list))
             cv2.imshow('', img)
-            cv2.waitKey(100)
+            cv2.waitKey(50)
