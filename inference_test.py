@@ -2,13 +2,65 @@ from ultralytics import YOLO
 import cv2
 import numpy as np
 import time
+from threading import Thread
+from multiprocessing import Process
+import matplotlib.pyplot as plt
+import torch
 
 
 
 
-model = YOLO('./models/yolov8m-sub-ep200-unf-d2.pt', task='detect')
-model.to('mps')
-video = cv2.VideoCapture('./records/2024-07-27-215131/2024-07-27-215131_sub.mp4')
+
+
+def init_model(model):
+    for _ in range(10):
+        model(np.zeros((360, 640, 3), np.int8), device='mps', conf=0.2)
+
+def preprocess_frame(frame):
+    frame = cv2.resize(frame, (640, 640))
+    frame = frame[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, HWC to CHW
+    frame = np.ascontiguousarray(frame)
+    frame = torch.tensor(frame, dtype=torch.float16).to('mps')
+    frame = frame.unsqueeze(0)  # Add batch dimension
+    return frame / 255.0
+
+
+def cal_100_inf(model, video, dummy=False):
+    inftime_list = []
+    i = 0
+    while True:
+        ret, frame = video.read()
+        if ret:
+            t1 = time.time_ns()
+            results = model(frame, device='mps', conf=0.25)
+            t2 = time.time_ns()
+            if not dummy:
+                inftime_list.append((t2 - t1) / 1e+6)
+            i += 1
+        else:
+            break
+    if not dummy:
+        plt.plot(inftime_list)
+        plt.show()
+
+
+if __name__ == '__main__':
+    model_1 = YOLO('./models/yolov8m-ep200-unf-d4.pt', task='segment')
+    model_2 = YOLO('./models/yolov10x.pt', task='detect')
+    init_model(model_1)
+    init_model(model_2)
+    model_1.to('mps')
+    model_2.to('mps')
+    test_cap = cv2.VideoCapture('./records/2024-08-03-125616/2024-08-03-125616_main.mp4')
+    test_sub_cap = cv2.VideoCapture('./records/2024-08-03-125616/2024-08-03-125616_sub.mp4')
+    p1 = Thread(target=cal_100_inf, args=(model_1, test_cap, False))
+    p2 = Thread(target=cal_100_inf, args=(model_2, test_sub_cap, True))
+    p1.start()
+    p2.start()
+    p1.join()
+    p2.join()
+
+
 
 # while True:
 #     ret, frame = video.read()

@@ -14,10 +14,10 @@ current_result = []
 
 window_width = 360
 window_height = 360
-max_distance = 2500
+max_distance = 3500
 min_distance = 50
 min_angle = 0
-max_angle = 360
+max_angle = 180
 scale = window_width / (2 * max_distance)  # 360 / (2 * 2500) = 720 / 10000 = 0.072
 
 
@@ -215,11 +215,6 @@ def find_side_car_angle(scan, img=None):
         return result_angle
     else:
         return None
-
-
-
-
-
 
 
 def find_right_car(scan, img=None):

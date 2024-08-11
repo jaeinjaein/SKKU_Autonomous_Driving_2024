@@ -86,6 +86,68 @@ def find_line(results, line_cls=1):
     return None
 
 
+def find_bev_width_offset(model, image, SAMPLING_RATE, bev_height_offset, conf=0.8):
+    '''
+    1. Inference
+    2. bev_width_offset 값 0.001씩 늘려가면서 차선 찾기 -> 외부 리스트에 양쪽차선 기울기 차이 저장
+    3. 차이가 가장 적은 index 추출
+    4. 차이가 가장 적은 bev값 추출
+    '''
+    line1_ang, line2_ang = None, None
+    results = model(image, conf=conf, device='mps', verbose=False)
+    h, w, c = image.shape
+    point_r, point_l = None, None
+    angle_diffs = []
+    line1_pts, line2_pts = [], []
+    line_segments = []
+    for idx, box in enumerate(results[0].boxes):
+        if box.cls == 1:
+            line_segments.append(results[0].masks[idx].xy[0])
+    if len(line_segments) > 0:
+        line_segments.sort(key=lambda x: cv2.contourArea(x), reverse=True)
+        if cv2.contourArea(line_segments[0]) > 20000:
+            line1_pts, line2_pts = calculate_mainline((h, w), line_segments[0], SAMPLING_RATE)
+        else:
+            print('found, but size error')
+    line1_pts = np.array(line1_pts, dtype=np.float32)
+    line2_pts = np.array(line2_pts, dtype=np.float32)
+    if len(line1_pts) >= 5 and len(line2_pts) >= 5:
+        for bev_width_offset_1000 in range(100, 301, 1):
+            bev_width_offset = bev_width_offset_1000 / 1000.0
+            line1_pts_bev = tools.convert_bev_points((h, w), line1_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)
+            line1_pts_bev = line1_pts_bev.reshape(-1,2)
+            line1_pts_x, line1_pts_y = line1_pts_bev[:,0], line1_pts_bev[:,1]
+
+            point_r1_y = h * (SAMPLING_RATE - 0.05)
+            point_r2_y = h * SAMPLING_RATE
+
+            x_r, y_r, point_r1, point_r2, point_r = find_poly(h, line1_pts_x, line1_pts_y, 'ransac', 1, point_r1_y,
+                                                              point_r2_y)
+            line1_ang = math.degrees(math.atan((point_r2[0] - point_r1[0]) / (point_r1[1] - point_r2[1])))
+
+            line2_pts_bev = tools.convert_bev_points((h, w), line2_pts.reshape(-1, 1, 2), bev_width_offset, bev_height_offset)
+            line2_pts_bev = line2_pts_bev.reshape(-1, 2)
+            line2_pts_x, line2_pts_y = line2_pts_bev[:, 0], line2_pts_bev[:, 1]
+
+            point_l1_y = h * (SAMPLING_RATE - 0.05)
+            point_l2_y = h * SAMPLING_RATE
+
+            x_l, y_l, point_l1, point_l2, point_l = find_poly(h, line2_pts_x, line2_pts_y, 'ransac', 1, point_l1_y,
+                                                              point_l2_y)
+
+            line2_ang = math.degrees(math.atan((point_l2[0] - point_l1[0]) / (point_l1[1] - point_l2[1])))
+            angle_diffs.append(abs(line1_ang - line2_ang))
+        angle_diffs = np.array(angle_diffs)
+        # print(f'angle_diffs: {angle_diffs}')
+        # print(f'angle_min : {angle_diffs[np.argmin(angle_diffs)]}, idx : {np.argmin(angle_diffs)}')
+        # print(f'angle_max : {angle_diffs[np.argmax(angle_diffs)]}, idx : {np.argmax(angle_diffs)}')
+        return np.argmin(angle_diffs)
+        # cv2.imshow('', results[0].plot())
+        # cv2.waitKey(30)
+    else:
+        print('can\'t fine two line.')
+        return None
+
 def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height_offset, line_name, degree, visualize=False, conf=0.8):
     global INFERENCE_COLOR
     line1_ang, line2_ang = None, None
@@ -176,9 +238,9 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
 
     t3 = time.time_ns()
     print(f"t3 - t2 : {(t3 - t2) / 1000000}ms")
-    if point_r != None and point_l != None and abs(line1_ang) < 10 and abs(line2_ang) < 10:
+    if point_r != None and point_l != None and abs(line1_ang) < 7 and abs(line2_ang) < 7:
         mid_point_x = (point_r + point_l) // 2
-        mid_bias = (mid_point_x - 325) // 30
+        mid_bias = (mid_point_x - 310) // 30
         return image, drawed_img, line1_ang, line2_ang, mid_bias
     else:
         return image, drawed_img, line1_ang, line2_ang, None
