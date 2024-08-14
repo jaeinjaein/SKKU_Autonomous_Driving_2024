@@ -148,7 +148,7 @@ def find_bev_width_offset(model, image, SAMPLING_RATE, bev_height_offset, conf=0
         print('can\'t fine two line.')
         return None
 
-def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height_offset, line_name, degree, visualize=False, conf=0.8):
+def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height_offset, line_name, degree, visualize=False, conf=0.8, mid_x=325):
     global INFERENCE_COLOR
     line1_ang, line2_ang = None, None
     t0 = time.time_ns()
@@ -240,7 +240,7 @@ def inf_angle_mainline(model, image, SAMPLING_RATE, bev_width_offset, bev_height
     print(f"t3 - t2 : {(t3 - t2) / 1000000}ms")
     if point_r != None and point_l != None and abs(line1_ang) < 7 and abs(line2_ang) < 7:
         mid_point_x = (point_r + point_l) // 2
-        mid_bias = (mid_point_x - 310) // 30
+        mid_bias = (mid_point_x - mid_x) // 30
         return image, drawed_img, line1_ang, line2_ang, mid_bias
     else:
         return image, drawed_img, line1_ang, line2_ang, None
