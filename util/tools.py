@@ -129,7 +129,7 @@ def map_to_steering(value, angle_min, angle_max, steering_values):
         value = angle_min
     elif value > angle_max:
         value = angle_max
-    step = (angle_max - angle_min) / 21
+    step = (angle_max - angle_min) / len(steering_values)
     index = int((value - angle_min) // step)
     # if
     
