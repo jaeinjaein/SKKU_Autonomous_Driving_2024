@@ -24,6 +24,15 @@ subcam_device, maincam_device, lidar_device, main_ui = None, None, None, None
 
 
 class subcam():
+    '''
+    subcam(미션용) 코드
+    __init__(param : None) : 선언될 때 함수. 사용되는 모델 및 기본 변수들 초기화
+    start_camera(param : cam_index) : "cam_index" 번호의 카메라로 세션을 선언
+    start_video(param : video_path) : test 기능을 사용할 때, "video_path" 경로의 비디오로 카메라 세션을 선언
+    stop_video(param : None) : test 기능에서, 카메라 세션을 종료하는 기능
+    stop_camera(param : None) : 카메라 세션을 종료하는 기능
+    load_params(param : None) : subcam의 parameter들을 "params_sub.txt"에 있는 내용들로 업데이트
+    '''
     def __init__(self):
         self.cap = None
         self.model_car = YOLO('./models/yolov10x.pt', task='detect')
@@ -53,14 +62,6 @@ class subcam():
         # print(self.cap.get(cv2.CAP_PROP_GAIN))
         self.cap.set(cv2.CAP_PROP_FPS, 30)
         self.capture = False
-
-    def start_record(self):
-        local_time = time.localtime()
-        formatted_time = time.strftime('%Y-%m-%d-%H%M%S', local_time)
-        fourcc = cv2.VideoWriter_fourcc(*'H264')
-        self.writer_orig = cv2.VideoWriter(f'./videos/orig/{formatted_time}_sub.mp4', fourcc, self.fps, (640, 360))
-        self.writer_inferenced = cv2.VideoWriter(f'./videos/inferenced/{formatted_time}_sub.mp4', fourcc, self.fps,
-                                                 (640, 360))
 
     def stop_record(self):
         self.writer_orig.release()
@@ -107,6 +108,15 @@ class subcam():
 
 
 class maincam():
+    '''
+    maincam(주행용) 코드
+    __init__(param : None) : 선언될 때 함수. 사용되는 모델 및 기본 변수들 초기화
+    start_camera(param : cam_index) : "cam_index" 번호의 카메라로 세션을 선언
+    start_video(param : video_path) : test 기능을 사용할 때, "video_path" 경로의 비디오로 카메라 세션을 선언
+    stop_video(param : None) : test 기능에서, 카메라 세션을 종료하는 기능
+    stop_camera(param : None) : 카메라 세션을 종료하는 기능
+    load_params(param : None) : maincam의 parameter들을 "params.txt"에 있는 내용들로 업데이트
+    '''
     def __init__(self):
         self.cap = None
         self.model = YOLO('./models/yolov8m-ep200-unf-d4.pt', task='segment')
@@ -148,12 +158,6 @@ class maincam():
         if self.cap is not None:
             self.cap.release()
         self.cap = None
-
-    def stop_record(self):
-        self.writer_orig.release()
-        self.writer_inferenced.release()
-        self.writer_orig = None
-        self.writer_inferenced = None
 
     def start_video(self, video_path):
         if self.cap is not None:
@@ -224,6 +228,12 @@ def lidar_scan():
 
 
 class lidar():
+    '''
+    Lidar device의 개체
+    __init__(param : None) : 선언될 때 실행되는 함수로, 기본 변수값들 선언
+    start_lidar(param : port) : "port"에 있는 serial device를 대상으로 lidar session open
+    stop_lidar(param : None) : lidar session close
+    '''
     def __init__(self):
         self.window_width = 360
         self.window_height = 360
@@ -239,7 +249,6 @@ class lidar():
         self.car_a = None
         self.car_b = None
         self.turn_angle = 0.0
-
         self.BACK_PARAM_1 = 0.015
         self.BACK_PARAM_2 = 0.014
         self.BACK_PARAM_3 = 0.016
@@ -274,6 +283,14 @@ class lidar():
 
 
 class arduino():
+    '''
+    arduino device의 개체
+    __init__(param : None) : 개체가 선언될 때 실행되며, 개체의 기본 변수값들 선언
+    start_arduino(param : port) : "port"의 serial session open
+    stop_arduino(param : None) : arduino session close
+    send_data(param : data) : "data"(String)을 byte array로 변환하여 시리얼에 전송
+    connect, distonnect, reconnect(param : data) : serial 연결 관련 함수
+    '''
     def __init__(self):
         self.port = ''
         self.serial_session = None
@@ -1360,28 +1377,35 @@ def arduino_task():
 
 
 if __name__ == '__main__':
+    # subcam initialize
     subcam_device = subcam()
     subcam_device.load_params()
     subcam_timer = threading.Timer(1 / subcam_device.fps, subcam_task)
 
+    # maincam initialize
     maincam_device = maincam()
     maincam_device.load_params()
     maincam_timer = threading.Timer(1 / maincam_device.fps, maincam_task)
 
+    # lidar initialize
     lidar_device = lidar()
     lidar_thread = threading.Thread(target=lidar_scan, daemon=True)
 
+    # arduino initialize
     arduino_device = arduino()
     arduino_thread = threading.Thread(target=arduino_task, daemon=True)
 
+    # UI initialize
     app = QApplication(sys.argv)
     ex = MyApp()
 
+    # threads start
     subcam_timer.start()
     maincam_timer.start()
     arduino_thread.start()
     lidar_thread.start()
 
+    # program end
     sys.exit(app.exec_())
     lidar_thread.join()
     arduino_thread.join()
