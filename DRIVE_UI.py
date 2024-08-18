@@ -1360,6 +1360,10 @@ def maincam_task():
 
 
 def arduino_task():
+    '''
+    arduino task
+
+    '''
     global arduino_device
     while True:
         if arduino_device.current_speed != arduino_device.before_speed:
