@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+title: "bingbong_inference"
+message: "This project was awarded the Grand Prize at the 2024 3rd Future Vehicle Autonomous Driving Software Competition."
+type: software
+
+authors:
+- family-names: "Jaein"
+  given-names: "Lee"
+  affiliation: Sungkyunkwan University
+
+- family-names: "Minji"
+  given-names: "Kim"
+  affiliation: Sungkyunkwan University
+
+- family-names: "Jiwook"
+  given-names: "Jung"
+  affiliation: Sungkyunkwan University
+
+- family-names: "Jinwoo"
+  given-names: "Joo"
+  affiliation: Sungkyunkwan University
+
+- family-names: "Hyegyeong"
+  given-names: "Choi"
+  affiliation: Sungkyunkwan University
+
+doi: TODO
+repository-code: https://github.com/jaeinjaein/bingbong_inference
+
+version: 1.0.0
+license: MIT-License
+date-released: 2024-12-05
