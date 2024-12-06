@@ -1,7 +1,0 @@
-{
-  "package_name": "my_custom_msgs",
-  "non_idl_tuples": [
-    "/data/python_projects/autonomous_driving/driving/ros_node/my_custom_msgs:msg/LidarData.msg",
-    "/data/python_projects/autonomous_driving/driving/ros_node/my_custom_msgs:msg/LidarDatas.msg"
-  ]
-}
