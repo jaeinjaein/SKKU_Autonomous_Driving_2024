@@ -11,8 +11,11 @@ The system integrates deep learning-based lane segmentation with classical contr
 # Demo
 
 📹 **Competition Driving Demo**
+
 Video Link : https://www.youtube.com/watch?v=FwGlec1eLXw&t=10243s
+
 Driving : 46:06 ~ 47:56
+
 Mission(Avoid Vehicles, Traffic Signs, Parking : 2:49:40 ~ 2:53:20
 
 ---
