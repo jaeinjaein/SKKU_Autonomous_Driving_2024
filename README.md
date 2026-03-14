@@ -32,21 +32,8 @@ docs/system_architecture.png
 
 The autonomous driving system follows a robotics pipeline:
 
-Camera
-↓
-Lane Segmentation (YOLOv8-seg)
-↓
-Lane Geometry Extraction
-↓
-Steering Angle Calculation
-↓
-Vehicle Controller
-LiDAR
-↓
-Point Clustering
-↓
-Object Detection
-
+Camera -> Lane Segmentation (YOLOv8-seg) -> Lane Geometry Extraction -> Steering Angle Calculation -> Vehicle Control
+LiDAR -> Point Clustering -> Object Detection
 
 ---
 
