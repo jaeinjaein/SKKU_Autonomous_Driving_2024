@@ -68,24 +68,32 @@ The controller runs motor control using **RTOS-based parallel processing**.
 
 # Lane Perception
 
-Lane detection is implemented using **YOLOv8-seg**.
+### Model Finetuning
 
-The model detects two classes:
+Lane detection is implemented using **YOLOv8-seg**(Finetuning Head layer).
+
+The model finetuned to detect two classes:
 
 - left lane
 - right lane
 
-### Model Inference Example
+Training dataset was labeled using **Roboflow**.
 
-TODO : Roboflow dataset labeling screenshot
-
-Training dataset was labeled using **Roboflow** and finetuned from a COCO pretrained model.
+![Labeling Example](docs/labeling_example.png)
 
 Dataset split:
 
 | Train | Validation | Test |
 |---|---|---|
 | 2672 | 500 | 167 |
+
+| Model | Inferenece Time | mAP | Track invasion count|   
+|---|---|---|---|
+| yolov8n | 22ms | 90.90% | 1 |
+| yolov8s | 48ms | 93.57% | 0 |
+**| yolov8m | 87ms | 95.13% | 0 |**
+| yolov8l | 130ms | 95.26% | 1 |
+| yolov8x | 220ms | 96.92% | 1 |
 
 ---
 
