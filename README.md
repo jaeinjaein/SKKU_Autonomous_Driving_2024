@@ -109,15 +109,14 @@ Steps:
 
 1. YOLOv8-seg inference
 2. Extract segmentation points
-3. Perspective transform
+3. Perspective transform (BEV)
 4. RANSAC line regression
 5. Convert lane angle to steering command
 
 ---
 
 # Steering Control Example
-TODO : Steering result photo
-
+![Steering Example](docs/inference_example.png)
 The system calculates the steering angle from lane orientation and maps it into **40 discrete steering steps**.
 
 ---
