@@ -2,7 +2,7 @@
 
 Autonomous driving system developed for the **2024 Gachon University Autonomous Driving Competition**.
 
-This project implements a full autonomous driving pipeline including **lane perception, steering control, and LiDAR-based vehicle detection** on a 1/5-scale electric vehicle platform.
+This project implements a full autonomous driving pipeline including **lane perception, steering control, driving object detection, and LiDAR-based vehicle detection** on a 1/5-scale electric vehicle platform.
 
 The system integrates deep learning-based lane segmentation with classical control algorithms to enable stable autonomous driving in a real-world track environment.
 
@@ -11,16 +11,9 @@ The system integrates deep learning-based lane segmentation with classical contr
 # Demo
 
 📹 **Competition Driving Demo**
-
-[VIDEO LINK HERE]
-
-<!-- 
-추천:
-YouTube embed gif 또는 thumbnail
-
-예:
-https://youtu.be/xxxxx
--->
+Video Link : https://www.youtube.com/watch?v=FwGlec1eLXw&t=10243s
+Driving : 46:06 ~ 47:56
+Mission(Avoid Vehicles, Traffic Signs, Parking : 2:49:40 ~ 2:53:20
 
 ---
 
@@ -35,6 +28,7 @@ docs/system_architecture.png
 -->
 
 ![System Architecture](docs/system_architecture.png)
+
 
 The autonomous driving system follows a robotics pipeline:
 
@@ -57,6 +51,7 @@ Object Detection
 ---
 
 # Hardware Platform
+
 TODO : Vehicle System Overview Photo
 
 | Component | Device |
