@@ -52,7 +52,6 @@ Object Detection
 
 # Hardware Platform
 ![Hardware Platform](docs/car_platform.png)
-TODO : Vehicle System Overview Photo
 
 | Component | Device |
 |---|---|
@@ -70,12 +69,10 @@ The controller runs motor control using **RTOS-based parallel processing**.
 # Vehicle Hardware
 
 ### External View
-
-TODO : Vehicle External View Photo
+![Exterinal View](docs/car_exterior.png)
 
 ### Internal System
-
-TODO : Vehicle Internal Control System Photo
+![Internal View](docs/car_interior.png)
 
 ---
 
@@ -107,8 +104,7 @@ Dataset split:
 The steering value is computed from lane geometry.
 
 ### Algorithm Pipeline
-
-TODO : Algorithm Photo
+![Algorithm Pipeline](docs/steering_algorithm.png)
 
 Steps:
 
@@ -121,7 +117,6 @@ Steps:
 ---
 
 # Steering Control Example
-
 TODO : Steering result photo
 
 The system calculates the steering angle from lane orientation and maps it into **40 discrete steering steps**.
@@ -144,7 +139,6 @@ Final steering value : D_steer = D_line + D_calib
 Vehicle detection is implemented using LiDAR clustering.
 
 ### LiDAR Clustering Result
-
 TODO : Lidar clustering result photo
 
 Algorithm steps:
@@ -159,13 +153,11 @@ Detected vehicles are marked with bounding boxes.
 ---
 
 # Driving Track
-
 TODO : Driving Track Image
 
 ---
 
 # Driving Result
-
 TODO : Driving Result Video
 
 Result:
