@@ -51,7 +51,7 @@ Object Detection
 ---
 
 # Hardware Platform
-
+![Hardware Platform](docs/car_platform.png)
 TODO : Vehicle System Overview Photo
 
 | Component | Device |
