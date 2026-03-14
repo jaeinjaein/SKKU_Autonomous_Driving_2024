@@ -91,7 +91,7 @@ Dataset split:
 |---|---|---|---|
 | yolov8n | 22ms | 90.90% | 1 |
 | yolov8s | 48ms | 93.57% | 0 |
-**| yolov8m | 87ms | 95.13% | 0 |**
+| **yolov8m** | **87ms** | **95.13%** | **0** |
 | yolov8l | 130ms | 95.26% | 1 |
 | yolov8x | 220ms | 96.92% | 1 |
 
@@ -151,18 +151,14 @@ Detected vehicles are marked with bounding boxes.
 ---
 
 # Driving Track
-TODO : Driving Track Image
+![Driving_Track](docs/driving_track.png)
 
 ---
 
 # Driving Result
-TODO : Driving Result Video
-
-Result:
-
 - Completed **2 laps**
 - **No lane violations**
-- Total time: **~70 seconds**
+- Total time: **~70.829 seconds**
 
 ---
 
