@@ -68,10 +68,14 @@ The controller runs motor control using **RTOS-based parallel processing**.
 
 # Lane Perception
 
-### Model Finetuning
+### Model Finetuning (For Driving)
 
 Lane detection is implemented using **YOLOv8-seg**(Finetuning Head layer).
 ![Head layer](docs/head_layer.png)
+
+| Device | VRAM |
+|---|---|
+| RTX4060Ti | 16GB |
 
 The model finetuned to detect two classes:
 
@@ -88,6 +92,9 @@ Dataset split:
 |---|---|---|
 | 2672 | 500 | 167 |
 
+
+**Finetining Results**
+
 | Model | Inferenece Time | mAP | Track invasion count|   
 |---|---|---|---|
 | yolov8n | 22ms | 90.90% | 1 |
@@ -95,6 +102,11 @@ Dataset split:
 | **yolov8m** | **87ms** | **95.13%** | **0** |
 | yolov8l | 130ms | 95.26% | 1 |
 | yolov8x | 220ms | 96.92% | 1 |
+
+For balance real-time and accuracy performances, **yolov8m** model with FPS greater than 10 and no track invasion was selected.
+
+### Model Finetuning (For Obstacle Detection)
+TODO
 
 ---
 
@@ -128,7 +140,6 @@ To prevent accumulated error during long straight driving, a correction algorith
 Correction equation: D_calib = (M_set - M_img) / 30
 
 Final steering value : D_steer = D_line + D_calib
-
 
 ---
 
