@@ -104,7 +104,7 @@ Dataset split:
 The steering value is computed from lane geometry.
 
 ### Algorithm Pipeline
-![Algorithm Pipeline](docs/steering_algorithm.png)
+![Algorithm Pipeline](docs/steering_architecture.png)
 
 Steps:
 
