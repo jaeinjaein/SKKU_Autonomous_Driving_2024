@@ -71,6 +71,7 @@ The controller runs motor control using **RTOS-based parallel processing**.
 ### Model Finetuning
 
 Lane detection is implemented using **YOLOv8-seg**(Finetuning Head layer).
+![Head layer](docs/head_layer.png)
 
 The model finetuned to detect two classes:
 
@@ -137,7 +138,7 @@ Final steering value : D_steer = D_line + D_calib
 Vehicle detection is implemented using LiDAR clustering.
 
 ### LiDAR Clustering Result
-TODO : Lidar clustering result photo
+![Lidar Result](docs/lidar_result.png)
 
 Algorithm steps:
 
