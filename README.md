@@ -85,6 +85,7 @@ Dataset split:
 | Train | Validation | Test |
 |---|---|---|
 | 2672 | 500 | 167 |
+
 The dataset has been extended to reflect sunlight and varying illuminance over the track. (random trapezium, blur, brigtness modulation)
 
 sunlight / darker train dataset example
@@ -116,6 +117,7 @@ Dataset split:
 | Train | Validation | Test |
 |---|---|---|
 | 2231 | 190 | 86 |
+
 The dataset has also been extended to adjust various illuminance environments. (brightness modulation)
 
 brightness modulation train dataset example
