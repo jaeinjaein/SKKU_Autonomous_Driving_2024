@@ -4,7 +4,7 @@ Autonomous driving system developed for the **2024 Gachon University Autonomous 
 
 This project implements a full autonomous driving pipeline including **lane perception, steering control, driving object detection, and LiDAR-based vehicle detection** on a 1/5-scale electric vehicle platform.
 
-The system integrates deep learning-based lane segmentation with classical control algorithms to enable stable autonomous driving in a real-world track environment.
+Purpose of this project is performing autonomous driving including **self driving, avoid obstacle, recognize traffic signs, self parking**
 
 ---
 
@@ -16,27 +16,21 @@ Video Link : https://www.youtube.com/watch?v=FwGlec1eLXw&t=10243s
 
 Driving : 46:06 ~ 47:56
 
-Mission(Avoid Vehicles, Traffic Signs, Parking : 2:49:40 ~ 2:53:20
+Mission(Avoid Vehicles, Traffic Signs, Parking) : 2:49:40 ~ 2:53:20
 
 ---
 
 # System Overview
 
-<!--
-여기에 시스템 아키텍처 그림 넣기
-perception → control pipeline diagram
+The autonomous driving system follows a below pipelines:
 
-추천 파일명
-docs/system_architecture.png
--->
+**Self Driving** : Camera -> Lane Segmentation (Finetuned YOLOv8m-seg) -> Lane Geometry Extraction -> Steering Angle Calculation -> Vehicle Control
 
-![System Architecture](docs/system_architecture.png)
+**Avoid Obstacle** : Camera -> Object Detection (Original YOLOv10x) -> Find car objects' sizes/positions -> Vehicle Control
 
+**Recognize Traffic Signs** : Camera -> Object Detection (Finetuned YOLOv8m) -> Find traffic signs(Red/Yellow/Green) and roads' sizes/positions -> Vehicle Control
 
-The autonomous driving system follows a robotics pipeline:
-
-Camera -> Lane Segmentation (YOLOv8-seg) -> Lane Geometry Extraction -> Steering Angle Calculation -> Vehicle Control
-LiDAR -> Point Clustering -> Object Detection
+**Self Parking** : LiDAR -> Point Clustering -> Object Detection -> Vehicle Control
 
 ---
 
@@ -66,16 +60,16 @@ The controller runs motor control using **RTOS-based parallel processing**.
 
 ---
 
-# Lane Perception
-
-### Model Finetuning (For Driving)
-
-Lane detection is implemented using **YOLOv8-seg**(Finetuning Head layer).
-![Head layer](docs/head_layer.png)
+# Model Training
 
 | Device | VRAM |
 |---|---|
 | RTX4060Ti | 16GB |
+
+### For Driving
+
+Lane detection is implemented using **YOLOv8-seg**(Finetuning Head layer).
+![Head layer](docs/head_layer.png)
 
 The model finetuned to detect two classes:
 
@@ -91,6 +85,10 @@ Dataset split:
 | Train | Validation | Test |
 |---|---|---|
 | 2672 | 500 | 167 |
+The dataset has been extended to reflect sunlight and varying illuminance over the track. (random trapezium, blur, brigtness modulation)
+
+sunlight / darker train dataset example
+![Extended Dataset Example](docs/extended_dataset_driving.png)
 
 
 **Finetining Results**
@@ -105,8 +103,39 @@ Dataset split:
 
 For balance real-time and accuracy performances, **yolov8m** model with FPS greater than 10 and no track invasion was selected.
 
-### Model Finetuning (For Obstacle Detection)
-TODO
+**Inference Reusult**
+![Inference Result Driving](docs/inference_result_driving.png)
+
+
+### For detecting objects
+
+Detecting objects model is implemented using **yolov8**. This model also finetuned head layers.
+
+Dataset split:
+
+| Train | Validation | Test |
+|---|---|---|
+| 2231 | 190 | 86 |
+The dataset has also been extended to adjust various illuminance environments. (brightness modulation)
+
+brightness modulation train dataset example
+![Extended Dataset Example_2](docs/extended_dataset_obstacle.png)
+
+
+**Finetuning Results**
+
+| Model | Inference Time(with YOLOv10x) | mAP |
+|---|---|---|
+| yolov8n | NNms | NN.NN% |
+| yolov8s | SSms | SS.SS% |
+| yolov8m | MMms | MM.MM% |
+| yolov8l | LLms | LL.LL% |
+| yolov8x | XXms | XX.XX% |
+
+The model that guarantees real-time driving performance and has a high mAP was **yolov8m**, so that model was selected.
+
+**Inference Reusult**
+![Inference Result Obstacle](docs/inference_result_obstacle.png)
 
 ---
 
@@ -121,9 +150,10 @@ Steps:
 
 1. YOLOv8-seg inference
 2. Extract segmentation points
-3. Perspective transform (BEV)
-4. RANSAC line regression
-5. Convert lane angle to steering command
+3. Split points right line / left line
+4. Perspective transform (BEV)
+5. RANSAC line regression
+6. Convert lane angle to steering command
 
 ---
 
