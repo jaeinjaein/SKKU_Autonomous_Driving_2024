@@ -94,7 +94,7 @@ sunlight / darker train dataset example
 
 **Finetining Results**
 
-| Model | Inferenece Time | mAP | Track invasion count|   
+| Model | Inferenece Time | mAP(50-95) | Track invasion count|   
 |---|---|---|---|
 | yolov8n | 22ms | 90.90% | 1 |
 | yolov8s | 48ms | 93.57% | 0 |
@@ -126,13 +126,13 @@ brightness modulation train dataset example
 
 **Finetuning Results**
 
-| Model | Inference Time(with YOLOv10x) | mAP |
+| Model | Inference Time(with YOLOv10x) | mAP(50-95) |
 |---|---|---|
-| yolov8n | NNms | NN.NN% |
-| yolov8s | SSms | SS.SS% |
-| yolov8m | MMms | MM.MM% |
-| yolov8l | LLms | LL.LL% |
-| yolov8x | XXms | XX.XX% |
+| yolov8n | 12ms | 89.20% |
+| yolov8s | 18ms | 89.50% |
+| **yolov8m** | **21ms** | **90.20%** |
+| yolov8l | 29ms | 90.16% |
+| yolov8x | 48ms | 90.07% |
 
 The model that guarantees real-time driving performance and has a high mAP was **yolov8m**, so that model was selected.
 
